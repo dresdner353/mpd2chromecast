@@ -89,14 +89,16 @@ def volumio_agent(host,
         time.sleep(1)
 
         # Get status from Volumio
+        # Added exception protection to blanket 
+        # cover a failed API call or any of th given fields 
+        # not being found for whatever reason
         try:
             resp = api_session.get('http://localhost:3000/api/v1/getstate')
+            json_resp = resp.json()
+            status = json_resp['status']
+            uri = json_resp['uri']
         except:
             continue
-
-        json_resp = resp.json()
-        status = json_resp['status']
-        uri = json_resp['uri']
 
         volumio_status_str = json.dumps(json_resp, indent = 4)
         print("\n%s Volumio State:\n%s\n" % (time.asctime(),
