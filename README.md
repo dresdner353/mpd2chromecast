@@ -18,7 +18,7 @@ For a Raspberry Pi, you would need to do the following:
 sudo nano /etc/apt/sources.list
 
 and add in these two lines:
-``
+```
 deb http://archive.raspberrypi.org/debian/ jessie main
 deb-src http://archive.raspberrypi.org/debian/ jessie main
 ```
