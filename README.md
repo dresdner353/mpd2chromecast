@@ -18,20 +18,26 @@ For a Raspberry Pi, you would need to do the following:
 sudo nano /etc/apt/sources.list
 
 and add in these two lines:
-
+``
 deb http://archive.raspberrypi.org/debian/ jessie main
 deb-src http://archive.raspberrypi.org/debian/ jessie main
+```
 
 Install the Python3 env and required pip packages:
+```
 sudo apt-get install python3 python3-setuptools python3-venv python3-dev
 sudo easy_install3 pip
+```
 
-Copy the script to the RPi volumio folder and run it as follows:
-
+Copy the script to the RPi volumio home folder and run it as follows:
+```
 LC_ALL=en_US.UTF-8 ~/volumio2chromecast.py --ip <ip of chromecast> --port <port>
 
 or
 
 LC_ALL=en_US.UTF-8 ~/volumio2chromecast.py --name  <friendly name of chromecast> 
+```
 
-I had to use LC_ALL set to en_US.UTF-8 on my environment to get everything to work correctly. The script dumps status details each second on the commabnd line as to what is going on. 
+I had to use LC_ALL set to en_US.UTF-8 on my environment to get everything to work correctly. Without that change, there were issues with some cast file URLs not matching correctly to the filenames on the drive. 
+
+The script dumps status details each second on the commabnd line as to what is going on. It shows both the status details for Volumio and also for the Chromecast.
