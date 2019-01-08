@@ -12,6 +12,7 @@ import cherrypy
 import urllib
 import json
 import socket
+import traceback
 
 # dummy stream handler object for cherrypy
 class stream_handler(object):
@@ -74,9 +75,10 @@ def volumio_agent(host,
 
     api_session = requests.session()
 
-    media_ctrl = None # initial state
+    cast_device = None # initial state
 
     ctrl_create_count = 0
+    failed_status_update_count = 0
 
     # Cast state inits
     cast_status = 'none'
@@ -101,8 +103,9 @@ def volumio_agent(host,
             continue
 
         volumio_status_str = json.dumps(json_resp, indent = 4)
-        print("\n%s Volumio State:\n%s\n" % (time.asctime(),
-                                             volumio_status_str))
+        print("\n%s Volumio State:\n%s\n" % (
+            time.asctime(),
+            volumio_status_str))
 
         # switch 'music-library' to 'mnt' if present
         # Need this to represent absolute path of file
@@ -115,10 +118,27 @@ def volumio_agent(host,
         # recreation of the controller after detection of stale connections
         # also only does this if we're in a play state
         if (status == 'play' and 
-                media_ctrl is None):
-            print("Creating Chromecast media controller for %s:%d" % (host, port))
+                cast_device is None):
+            print("%s Connecting to Chromecast %s:%d" % (
+                time.asctime(), 
+                host, 
+                port))
             cast_device = pychromecast.Chromecast(host, port)
-            media_ctrl = cast_device.media_controller
+
+            # Kill off any current app
+            print("%s Waiting for device to get ready.." % (time.asctime()))
+            if not cast_device.is_idle:
+                print("Killing current running app")
+                cast.quit_app()
+
+            while not cast_device.is_idle:
+                time.sleep(1)
+
+            print("%s Connected to %s (%s) model:%s" % (
+                time.asctime(), 
+                cast_device.name,
+                cast_device.uri,
+                cast_device.model_name))
 
             ctrl_create_count += 1
 
@@ -128,19 +148,12 @@ def volumio_agent(host,
             cast_volume = 0
             cast_confirmed = 0
 
-            # Give a grace of 5 seconds for the Chromecast to 
-            # get ready
-            time.sleep(5)
 
-            # Stop playback incase something is already playing
-            media_ctrl.stop()
-
-
-        # Skip remainder of loop if we have no media controller to 
+        # Skip remainder of loop if we have no device to 
         # handle. This will happen if we are in an initial stopped or 
         # paused state or ended up in these states for a long period
-        if (media_ctrl is None):
-            print("%s No media controller active" % (time.asctime()))
+        if (cast_device is None):
+            print("%s No active Chromecast device" % (time.asctime()))
             continue
 
         # Detection of Events from Volumio
@@ -161,7 +174,7 @@ def volumio_agent(host,
             status == 'pause'):
 
             print("Pausing Chromecast")
-            media_ctrl.pause()
+            cast_device.media_controller.pause()
             cast_status = status
         
         # Resume play
@@ -169,7 +182,7 @@ def volumio_agent(host,
             status == 'play'):
 
             print("Unpause Chromecast")
-            media_ctrl.play()
+            cast_device.media_controller.play()
             cast_status = status
 
             # Update volume while we're at it
@@ -186,11 +199,11 @@ def volumio_agent(host,
 
             if (uri == ''):
                 # normal stop no next track set
-                # We can also ditch the media controller
+                # We can also ditch the device
                 print("Stop Chromecast")
-                media_ctrl.stop()
+                cast_device.media_controller.stop()
                 cast_status = status
-                media_ctrl = None
+                cast_device = None
 
             elif (uri != cast_uri):
                 # track switch
@@ -201,9 +214,9 @@ def volumio_agent(host,
 
                 # Prep for playback but paused
                 # autoplay = False
-                media_ctrl.play_media(chromecast_url, 
-                                      content_type = type,
-                                      autoplay = False)
+                cast_device.play_media(chromecast_url, 
+                                       content_type = type,
+                                       autoplay = False)
 
                 # Assume in paused state
                 # Another 'play' event will trigger us 
@@ -226,8 +239,8 @@ def volumio_agent(host,
                 type))
 
             # Let the magic happen
-            media_ctrl.play_media(chromecast_url, 
-                                  content_type = type)
+            cast_device.play_media(chromecast_url, 
+                                   content_type = type)
             # unset cast confirmation
             cast_confirmed = 0 
 
@@ -246,23 +259,38 @@ def volumio_agent(host,
         # Status updates from Chromecast
         if (status != 'stop'):
 
+            # We need an updated status from the Chromecast
+            # This can fail sometimes when nothing is really wrong and 
+            # then other times when things are wrong :)
+            #
+            # So we give it a tolerance of 5 consecutive failures
             try:
-                media_ctrl.update_status()
+                cast_device.media_controller.update_status()
             except:
-                print("%s Detected broken controller" % (time.asctime()))
-                media_ctrl = None
-                cast_status = 'none'
-                cast_uri = 'none'
-                cast_volume = 0
-                cast_confirmed = 0
-                continue
+                failed_status_update_count += 1
+                print("%s Failed to get chromecast status.. %d/5" % (
+                    time.asctime(),
+                    failed_status_update_count))
 
-            cast_url = media_ctrl.status.content_id
-            cast_elapsed = int(media_ctrl.status.current_time)
+                if (failed_status_update_count >= 5):
+                    print("%s Detected broken controller after 5 failures to get status" % (time.asctime()))
+                    cast_device = None
+                    cast_status = 'none'
+                    cast_uri = 'none'
+                    cast_volume = 0
+                    cast_confirmed = 0
+                    failed_status_update_count = 0
+                    continue
+
+            # Reset failed status count
+            failed_status_update_count = 0
+
+            cast_url = cast_device.media_controller.status.content_id
+            cast_elapsed = int(cast_device.media_controller.status.current_time)
 
             # Length and progress calculation
-            if media_ctrl.status.duration is not None:
-                duration = int(media_ctrl.status.duration)
+            if cast_device.media_controller.status.duration is not None:
+                duration = int(cast_device.media_controller.status.duration)
                 progress = int(cast_elapsed / duration * 100)
             else:
                 duration = 0
@@ -298,26 +326,26 @@ def volumio_agent(host,
             # before they actually start.
             if (status == 'play' and 
                     cast_confirmed == 1 and 
-                    media_ctrl.status.player_is_idle):
+                    cast_device.media_controller.status.player_is_idle):
                 print("%s Request Next song" % (time.asctime()))
                 cast_confirmed = 0
                 resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=next')
 
 
-            # sync local progress every 30 seconds
+            # sync local progress every 10 seconds
             # This is not exact and will likely keep volumio behind.
             # However we want to avoid volumio playback progress charging ahead 
             # of the chromecast progress as it could change track before the 
             # chromecast completes it playback.
-            # We also limit this sync to confirmed casts and put a stop at 90% progress
+            # We also limit this sync to confirmed casts and put a stop at 50% progress
             # as we'll be close enough by then.
             # We also ignore radio strems as sync does not apply to them
             # Had to do this sync as a system call to the volumio CLI
             # as there is no restful API call to match
             if (status == 'play' and 
                     cast_confirmed == 1 and 
-                    cast_elapsed % 30 == 0 and 
-                    progress < 90 and
+                    cast_elapsed % 10 == 0 and 
+                    progress < 50 and
                     not cast_uri.startswith('http')):
                 print("%s Sync Chromecast elapsed to Volumio" % (time.asctime()))
                 os.system("volumio seek %d >/dev/null 2>&1" % (cast_elapsed))
