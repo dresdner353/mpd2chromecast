@@ -184,10 +184,6 @@ def volumio_agent(host,
             print("Unpause Chromecast")
             cast_device.media_controller.play()
             cast_status = status
-
-            # Update volume while we're at it
-            cast_device.set_volume(volume)
-            cast_volume = volume
         
         # Stop
         if (cast_status != 'stop' and 
@@ -244,14 +240,7 @@ def volumio_agent(host,
             # unset cast confirmation
             cast_confirmed = 0 
 
-            # Set Volume
-            cast_device.set_volume(volume)
-
             # Note the various specifics of play 
-            # status, volume and URI we are playing
-            # Will need these as part of decision making
-            # when handling other events
-            cast_volume = volume
             cast_status = status
             cast_uri = uri
     
