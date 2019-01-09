@@ -30,20 +30,42 @@ sudo easy_install3 pip
 sudo pip3 install pychromecast cherrypy
 ```
 
-Copy the script to the RPi volumio home folder and run it as follows:
+As volumio user, install the script as follows:
+
 ```
-LC_ALL=en_US.UTF-8 ~/volumio2chromecast.py --ip <ip of chromecast> --port <port>
+cd
+git clone https://github.com/dresdner353/volumio2chromecast.git
+```
+
+## Testing
+To run the script manually:
+```
+LC_ALL=en_US.UTF-8 ~/volumio2chromecast/volumio2chromecast.py --ip <ip of chromecast> --port <port>
 
 or
 
-LC_ALL=en_US.UTF-8 ~/volumio2chromecast.py --name  <friendly name of chromecast> 
+LC_ALL=en_US.UTF-8 ~/volumio2chromecast/volumio2chromecast.py --name  <friendly name of chromecast> 
 ```
 
 I had to use LC_ALL set to en_US.UTF-8 on my environment to get everything to work correctly. Without that change, there were issues with some cast file URLs not matching correctly to the filenames on the drive. 
 
-I have not yet added some supporting scripts to run this in the background yet as it's still very much a work in progress... a prototype realy. In my current test device (Rpi 1B), I'm using the "screen" app to run a background detached terminal which runs the above in a while true loop and I detach from the terminal then when I want to disconnect. 
+With the script now running, you should be able to select music for playback and hopefully get it to cast to your chromecast device.
 
-I will eventually add a background script that can be tied to cron or whatnot to better manage this or some more appropriate Pi-way of managing a service. I have managed to get the script to run fine for well over a day uninterrupted but it will sometimes get an exception and exit. 
+## Enabling the script to run at startup
+There are no doube many ways to go about this. I'm going to describe a method using crontab but each to his or her own preferences.
+
+```
+sudo apt-get install gnome-schedule
+nano volumio2chromecast/volumio2chromecast.sh 
+   .. edit the desired name for the CHROMECAST variable
+   .. save the file
+   
+crontab -e 
+    .. when prompted, select the desired editor and add this line:
+    * * * * * /home/volumio/volumio2chromecast/volumio2chromecast.sh > /dev/null
+
+```
+The crontab entry will run the startup script every minute and ensure that the agent is kept running. 
 
 ## How it works
 When you run the script it will first do a discovery of your specified Chromecast (if you specified it by --name) to obtain its IP and port. That will take several seconds as it runs the DNS-SD to discover devices. You can alternatively start with the --ip and optional --port options for your target chromecast device.
