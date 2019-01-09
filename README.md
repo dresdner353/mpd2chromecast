@@ -27,6 +27,7 @@ Install the Python3 env and required pip packages:
 ```
 sudo apt-get install python3 python3-setuptools python3-venv python3-dev
 sudo easy_install3 pip
+sudo pip3 install pychromecast cherrypy
 ```
 
 Copy the script to the RPi volumio home folder and run it as follows:
