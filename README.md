@@ -88,4 +88,4 @@ I have noticed some playback gaps with these files. The test Pi I'm using is a P
 
 If we want 5.1 24/96 playback via Chromecast, the only logical way to see that get realised if it plays via the HDMI variant and streams to the AVR as multichannel PCM. I'm hoping the Chocolate Factory will go this route eventually. It might be something the Chromecast Ultra can do but alas I don't have one to hand.
 
-Sop hope you find this useful for you if yuo are trying to get Volumio to play nice with Chromecast. 
+So I hope you find this useful for you if yuo are trying to get Volumio to play nice with Chromecast. 
