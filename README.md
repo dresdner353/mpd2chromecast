@@ -52,7 +52,7 @@ I had to use LC_ALL set to en_US.UTF-8 on my environment to get everything to wo
 With the script now running, you should be able to select music for playback and hopefully get it to cast to your chromecast device.
 
 ## Enabling the script to run at startup
-There are no doube many ways to go about this. I'm going to describe a method using crontab but each to his or her own preferences.
+There are no doubt many ways to go about this. I'm going to describe a method using crontab but each to his or her own preferences.
 
 ```
 sudo apt-get install gnome-schedule
