@@ -329,15 +329,13 @@ def volumio_agent(host,
             # We also limit this sync to confirmed casts and put a stop at 50% progress
             # as we'll be close enough by then.
             # We also ignore radio strems as sync does not apply to them
-            # Had to do this sync as a system call to the volumio CLI
-            # as there is no restful API call to match
             if (status == 'play' and 
                     cast_confirmed == 1 and 
                     cast_elapsed % 10 == 0 and 
                     progress < 50 and
                     not cast_uri.startswith('http')):
-                print("%s Sync Chromecast elapsed to Volumio" % (time.asctime()))
-                os.system("volumio seek %d >/dev/null 2>&1" % (cast_elapsed))
+                print("%s Sync Chromecast elapsed %d secs to Volumio" % (time.asctime(), cast_elapsed))
+                resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (cast_elapsed))
     
 
 
@@ -357,7 +355,7 @@ parser.add_argument('--ip',
                     required = False)
 
 parser.add_argument('--port', 
-                    help = 'Chromecast Port (default )', 
+                    help = 'Chromecast Port (default:8009)', 
                     default = 8009,
                     type = int,
                     required = False)
