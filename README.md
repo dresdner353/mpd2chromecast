@@ -37,6 +37,17 @@ cd
 git clone https://github.com/dresdner353/volumio2chromecast.git
 ```
 
+## Test Run
+To get it running on a terminal and in full verbose mode, just do the following, substituting in the friendly name of your preferred Chromecast:
+```
+LC_ALL=en_US.UTF-8  ~/volumio2chromecast/volumio2chromecast.py --name '<name of chromecast>'
+```
+You can also invoke the script and point at the IP and optional port for a Chromecast:
+```
+LC_ALL=en_US.UTF-8  ~/volumio2chromecast/volumio2chromecast.py --ip '<IP Address of chromecast>'
+```
+In this mode, the script will output data every second showing Volumio playback status and any related activity from the Chromecast. Once you have the script running, it should start tying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, changing volume and you should see the Chromecast react pretty quickly.
+
 ## Starting the Agent in the Background
 
 You should first run the set_chromecast.py script to perform a scan of the available Chromecast devices on your network and then make your selection by number. For example:
@@ -66,7 +77,7 @@ Setting desired Chromecast to [Office]
 volumio@volumio:~$ 
 ```
 
-Then to start the agent use this command:
+Then to start the agent in the background, use this command:
 ```
 ./volumio2chromecast/volumio2chromecast.sh
 ```
