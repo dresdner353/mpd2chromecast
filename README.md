@@ -48,6 +48,8 @@ LC_ALL=en_US.UTF-8  ~/volumio2chromecast/volumio2chromecast.py --ip '<IP Address
 ```
 In this mode, the script will output data every second showing Volumio playback status and any related activity from the Chromecast. Once you have the script running, it should start tying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, changing volume and you should see the Chromecast react pretty quickly.
 
+Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because when left on my default locale (Ireland UTF-8), something went wrong with how UTF-8 characters we being matched between filenames on the disk and the URLs. I suspect it relates to locale specifics within the Volumio app and needing to have a match on my end. 
+
 ## Starting the Agent in the Background
 
 You should first run the set_chromecast.py script to perform a scan of the available Chromecast devices on your network and then make your selection by number. For example:
@@ -68,7 +70,7 @@ Enter device number: 7
 Setting desired Chromecast to [Office]
 volumio@volumio:~$ 
 ```
-This then saves the selected Chronecast name in ~/.castrc.
+This then saves the selected Chronecast name in ~/.castrc. 
 
 You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
 ```
@@ -104,11 +106,11 @@ crontab -e
 ## How it works
 When you run the script it will first do a discovery of your specified Chromecast (if you specified it by --name) to obtain its IP and port. That will take several seconds as it runs the DNS-SD to discover devices. You can alternatively start with the --ip and optional --port options for your target chromecast device.
 
-After determining the IP and port of the target chromecast, the script then runs two threads. One thread manages a webserver which is using cherrypy for the engine. That webserver serves up a file tree from / and is used to serve up URLs generated from the currently playing file.
+After determining the IP and port of the target chromecast, the script then runs two threads. One thread manages a webserver which is using cherrypy for the engine. That webserver serves up a file tree from /mnt and is used to serve up URLs generated from the currently playing file.
 
 The other thread is a continuous loop using a 1 second sleep that works between the Volumio current play state and the Chromecast playback state. 
 
-At the console, the script will start showing the current Volumio JSON state every second. It gets this by calling the RESTful API function http://localhost:3000/api/v1/getstate
+When the python script is run at the console, the script will start showing the current Volumio JSON state every second. It gets this by calling the RESTful API function http://localhost:3000/api/v1/getstate
 
 If it detects that something is playing, it will generate a URL for the file (using the uri field of the volumio state) and invoke a cast of that file URL to the specified Chromecast. That is where the pychromecast module comes in to drive all interaction with the Chromecast. The Chromecast should then call back to us on the webserver port to stream the URL. It will return at intervals to pull more data from the file as the playback progresses.
 
@@ -116,11 +118,11 @@ By having the regular 1-second status updates from Volumio, it also ties into vo
 
 However, there is no seek functionality at this stage. So you can’t skip ahead/back within a given track. 
 
-If the script loses connectivity to the Chromecast it will detect this, re-establish a cast and start streaming again. Even if someone independently casts to the device from another app, this script will steal back control on the next track change. 
+If the script loses connectivity to the Chromecast it will detect this and try to re-establish a cast and start streaming again. Even if someone independently casts to the device from another app, this script will steal back control on the next track change. 
 
 To stop the streaming, you clear the queue on Volumio or let the current playlist play out and that will put it into a stopped state on the Volumio end which directs the script to stop casting and release all control over the Chromecast.
 
-I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. It will also work with Chromecast Groups and provide sync'd playback across the grouped devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references it into URLs. 
+I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. It will also work with Chromecast Groups and provide synced playback across the grouped devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references it into URLs. 
 
 ### Syncing playback and the issue of seek
 Just FYI the seek restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
