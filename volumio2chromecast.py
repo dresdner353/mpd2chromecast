@@ -36,7 +36,7 @@ def web_server():
     web_conf = {
        '/': {
            'tools.staticdir.on': True,
-           'tools.staticdir.dir': '/',
+           'tools.staticdir.dir': '/mnt',
            'tools.staticdir.index': 'index.html',
        }
     }
@@ -107,9 +107,13 @@ def volumio_agent(host,
             time.asctime(),
             volumio_status_str))
 
-        # switch 'music-library' to 'mnt' if present
-        # Need this to represent absolute path of file
-        uri = uri.replace('music-library', 'mnt')
+        # remove leading 'music-library' or 'mnt' if present
+        # we're hosting from /mnt so we need remove the top-level
+        # dir
+        for prefix in ['music-library/', 'mnt/']:
+            prefix_len = len(prefix)
+            if uri.startswith(prefix):
+                uri = uri[prefix_len:]
 
         volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
 
