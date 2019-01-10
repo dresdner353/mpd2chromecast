@@ -37,35 +37,58 @@ cd
 git clone https://github.com/dresdner353/volumio2chromecast.git
 ```
 
-## Testing
-To run the script manually:
+## Starting the Agent in the Background
+
+You should first run the set_chromecast.py script to perform a scan of the available Chromecast devices on your network and then make your selection by number. For example:
 ```
-LC_ALL=en_US.UTF-8 ~/volumio2chromecast/volumio2chromecast.py --ip <ip of chromecast> --port <port>
+volumio@volumio:~$ ./volumio2chromecast/set_chromecast.py
+Discovering Chromecasts.. (this may take a while)
+Found 9 devices
+ 0   Girls Google Home
+ 1   Cian's Google Home
+ 2   Living Room
+ 3   Living Room Google Home
+ 4   Test Group
+ 5   Kitchen Google Home
+ 6   Master Bedroom
+ 7   Office
+ 8   Office Google Home
+Enter device number: 7
+Setting desired Chromecast to [Office]
+volumio@volumio:~$ 
+```
+This then saves the selected Chronecast name in ~/.castrc.
 
-or
-
-LC_ALL=en_US.UTF-8 ~/volumio2chromecast/volumio2chromecast.py --name  <friendly name of chromecast> 
+You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
+```
+volumio@volumio:~$ ./volumio2chromecast/set_chromecast.py --name 'Office'
+Setting desired Chromecast to [Office]
+volumio@volumio:~$ 
 ```
 
-I had to use LC_ALL set to en_US.UTF-8 on my environment to get everything to work correctly. Without that change, there were issues with some cast file URLs not matching correctly to the filenames on the drive. 
-
-With the script now running, you should be able to select music for playback and hopefully get it to cast to your chromecast device.
+Then to start the agent use this command:
+```
+./volumio2chromecast/volumio2chromecast.sh
+```
+You can also force a restart of the agent using the "restart" option:
+```
+./volumio2chromecast/volumio2chromecast.sh restart
+```
 
 ## Enabling the script to run at startup
-There are no doubt many ways to go about this. I'm going to describe a method using crontab but each to his or her own preferences.
+The shell script mentioned above is crontab friendly in that it can be invoked continually and will only start the agent if it's not found to be running. 
 
+To setup crontab on the Pi:
 ```
 sudo apt-get install gnome-schedule
-nano volumio2chromecast/volumio2chromecast.sh 
-   .. edit the desired name for the CHROMECAST variable
-   .. save the file
    
 crontab -e 
     .. when prompted, select the desired editor and add this line:
     * * * * * /home/volumio/volumio2chromecast/volumio2chromecast.sh > /dev/null
 
 ```
-The crontab entry will run the startup script every minute and ensure that the agent is kept running. 
+
+
 
 ## How it works
 When you run the script it will first do a discovery of your specified Chromecast (if you specified it by --name) to obtain its IP and port. That will take several seconds as it runs the DNS-SD to discover devices. You can alternatively start with the --ip and optional --port options for your target chromecast device.
