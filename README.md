@@ -109,7 +109,7 @@ If the script loses connectivity to the Chromecast it will detect this, re-estab
 
 To stop the streaming, you clear the queue on Volumio or let the current playlist play out and that will put it into a stopped state on the Volumio end which directs the script to stop casting and release all control over the Chromecast.
 
-I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references it into URLs. 
+I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. It will also work with Chromecast Groups and provide sync'd playback across the grouped devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references it into URLs. 
 
 ### Syncing playback and the issue of seek
 Just FYI the seek restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
