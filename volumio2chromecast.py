@@ -14,6 +14,107 @@ import json
 import socket
 import traceback
 
+# Config inits
+gv_cfg_filename = ""
+gv_chromecast_name = ""
+gv_chromecast_ip = ""
+gv_chromecast_port = 0
+
+
+def resolve_chromecast():
+    global gv_chromecast_name
+    global gv_chromecast_ip
+    global gv_chromecast_port
+
+    print("Discovering Chromecasts.. looking for [%s]" % (gv_chromecast_name))
+    devices = pychromecast.get_chromecasts()
+    
+    cast_device = None
+    for cc in devices:
+        if (cc.device.friendly_name == gv_chromecast_name):
+            cast_device = cc
+            print("Found device.. %s:%d" % (cast_device.host,
+                                            cast_device.port))
+            gv_chromecast_ip = cast_device.host
+            gv_chromecast_port = cast_device.port
+            break
+    
+    
+    if (cast_device is None):
+        print("Unable to find device")
+        sys.exit(-1)
+
+    return
+
+
+def load_config():
+    global gv_cfg_filename
+    global gv_chromecast_name
+
+    print("Loading config from %s" % (gv_cfg_filename))
+    cfg_file = open(gv_cfg_filename, 'r')
+    json_str = cfg_file.read()
+    json_cfg = json.loads(json_str)
+    cfg_file.close()
+
+    gv_chromecast_name = json_cfg['chromecast']
+    print("Set Chromecast device to [%s]" % (gv_chromecast_name))
+
+    return
+
+
+def config_init(name, ip, port):
+    global gv_chromecast_ip
+    global gv_chromecast_port
+    global gv_chromecast_name
+    global gv_cfg_filename
+
+    gv_chromecast_name = name
+    gv_chromecast_ip = ip
+    gv_chromecast_port = port
+
+    if (gv_chromecast_name == "" and 
+            gv_chromecast_ip == ""):
+        # Determine home directory and cfg file
+        # given no cmdline args used
+        home = os.path.expanduser("~")
+        gv_cfg_filename = home + '/.castrc'
+        load_config()
+
+    # Resolve name if set
+    if (gv_chromecast_name != ""):
+        resolve_chromecast()
+
+
+def config_agent():
+    # monitor the config file and react on changes
+    global gv_cfg_filename
+
+    last_check = 0
+
+    # 5-second check for config changes
+    while (1):
+        if os.path.exists(gv_cfg_filename):
+            config_last_modified = os.path.getmtime(gv_cfg_filename)
+            if config_last_modified > last_check:
+                print("Detected update to %s" % (gv_cfg_filename))
+                load_config()
+                resolve_chromecast()
+                last_check = config_last_modified
+
+        time.sleep(5)
+
+    return 
+
+
+def get_chromecast_details():
+    global gv_chromecast_ip
+    global gv_chromecast_port
+
+    # return as a tuple
+    return (gv_chromecast_ip, gv_chromecast_port)
+
+
 # dummy stream handler object for cherrypy
 class stream_handler(object):
     pass
@@ -69,9 +170,8 @@ def volumio_uri_to_url(server_ip,
     return (chromecast_url, type)
     
 
-def volumio_agent(host,
-                  port,
-                  server_ip):
+def volumio_agent():
+    global gv_server_ip
 
     api_session = requests.session()
 
@@ -79,6 +179,9 @@ def volumio_agent(host,
 
     ctrl_create_count = 0
     failed_status_update_count = 0
+
+    cc_host = ""
+    cc_port = 0
 
     # Cast state inits
     cast_status = 'none'
@@ -117,6 +220,21 @@ def volumio_agent(host,
 
         volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
 
+        # Configured Chromecast host and port
+        # This can update on the fly so we seek to 
+        # detect this
+        (host, port) = get_chromecast_details()
+        if (cc_host != host or cc_port != port):
+            cc_host = host
+            cc_port = port
+
+            # Stop media player of existing device
+            # if it exists
+            if (cast_device is not None):
+                cast_device.media_controller.stop()
+                cast_status = status
+                cast_device = None
+
         # Controller management
         # Handles first creation of the controller and 
         # recreation of the controller after detection of stale connections
@@ -125,9 +243,9 @@ def volumio_agent(host,
                 cast_device is None):
             print("%s Connecting to Chromecast %s:%d" % (
                 time.asctime(), 
-                host, 
-                port))
-            cast_device = pychromecast.Chromecast(host, port)
+                cc_host, 
+                cc_port))
+            cast_device = pychromecast.Chromecast(cc_host, cc_port)
 
             # Kill off any current app
             print("%s Waiting for device to get ready.." % (time.asctime()))
@@ -207,7 +325,7 @@ def volumio_agent(host,
 
             elif (uri != cast_uri):
                 # track switch
-                chromecast_url, type = volumio_uri_to_url(server_ip, uri)
+                chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
                 print("Casting URL (paused):%s type:%s" % (
                     chromecast_url.encode('utf-8'),
                     type))
@@ -232,7 +350,7 @@ def volumio_agent(host,
             status == 'play') or
             (status == 'play' and uri != cast_uri)):
 
-            chromecast_url, type = volumio_uri_to_url(server_ip, uri)
+            chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
     
             print("Casting URL:%s type:%s" % (
                 chromecast_url.encode('utf-8'),
@@ -346,7 +464,7 @@ def volumio_agent(host,
 # main
 
 parser = argparse.ArgumentParser(
-        description='Volumio Chromecast Controller')
+        description='Volumio Chromecast Agent')
 
 parser.add_argument('--name', 
                     help = 'Chromecast Friendly Name', 
@@ -365,40 +483,23 @@ parser.add_argument('--port',
                     required = False)
 
 args = vars(parser.parse_args())
-cast_name = args['name']
-cast_ip = args['ip']
-cast_port = args['port']
+gv_chromecast_name = args['name']
+gv_chromecast_ip = args['ip']
+gv_chromecast_port = args['port']
 
-if (cast_name == "" and cast_ip == ""):
-    print("Must specify Chromecast friendly name or IP address")
-    sys.exit(-1)
+# Init config
+# This will set the desired IP and port,
+# resolve the desired name to an IP and port
+# or fallback on setting up the global config file
+config_init(gv_chromecast_name,
+        gv_chromecast_ip,
+        gv_chromecast_port)
 
-if (cast_name != ""):
-    print("Discovering Chromecasts.. looking for [%s]" % (cast_name))
-    devices = pychromecast.get_chromecasts()
-    
-    cast_device = None
-    for cc in devices:
-        if (cc.device.friendly_name == cast_name):
-            cast_device = cc
-            print("Found device.. %s:%d" % (cast_device.host,
-                                            cast_device.port))
-            cast_ip = cast_device.host
-            cast_port = cast_device.port
-            break
-    
-    
-    if (cast_device is None):
-        print("Unable to find device")
-        sys.exit(-1)
-
-
-# Determine the main IP address
+# Determine the main IP address of the server
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.connect(("8.8.8.8", 80))
-server_ip = s.getsockname()[0]
+gv_server_ip = s.getsockname()[0]
 s.close()
-
 
 # Thread management and main loop
 thread_list = []
@@ -410,14 +511,19 @@ web_server_t.start()
 thread_list.append(web_server_t)
 
 # Volumio Agent
-volumio_t = threading.Thread(target = volumio_agent,
-                             args = (cast_ip,
-                                     cast_port,
-                                     server_ip)
-                             )
+volumio_t = threading.Thread(target = volumio_agent)
 volumio_t.daemon = True
 volumio_t.start()
 thread_list.append(volumio_t)
+
+if (gv_cfg_filename != ""):
+    # Config server thread if we're set to 
+    # drive config from a file. that we we can 
+    # handle updates
+    config_t = threading.Thread(target = config_agent)
+    config_t.daemon = True
+    config_t.start()
+    thread_list.append(config_t)
 
 while (1):
     dead_threads = 0
