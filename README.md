@@ -101,6 +101,11 @@ crontab -e
 
 ```
 
+## Dynamically switching Chromecast
+When using the saved config approach, the script watches the ~/.castrc file for changes. If it detects a change, it reloads config, reresolves the Chromecast and switches device. It will also try to stop playback on the current device.
+
+All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10 seconds, giving time for the change to be detected and discovery of the new device to take place.
+
 
 
 ## How it works
