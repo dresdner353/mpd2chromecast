@@ -4,6 +4,7 @@
 import pychromecast
 import argparse
 import os
+import json
 
 # main
 
@@ -40,6 +41,8 @@ if (cast_name == ""):
 
 if cast_name != "":
     print("Setting desired Chromecast to [%s]" % (cast_name))
-    env_file  = open(home + '/.castrc', 'w') 
-    env_file.write('CHROMECAST="%s"\n' % (cast_name))
-    env_file.close()
+    cfg_file = open(home + '/.castrc', 'w') 
+    json_cfg = {}
+    json_cfg['chromecast'] = cast_name
+    cfg_file.write('%s\n' % (json.dumps(json_cfg)))
+    cfg_file.close()
