@@ -15,8 +15,6 @@ AGENT=~/volumio2chromecast/volumio2chromecast.py
 PID_FILE=/tmp/cast.pid
 
 cd
-# Load config
-. ~/.castrc
 
 # Optional restart
 if [ "${1}" == "restart" ] && [ -f ${PID_FILE} ]
@@ -31,8 +29,7 @@ RC=`pgrep -F ${PID_FILE} 2>/dev/null | wc -l`
 if [ ${RC} -eq 0 ]
 then
     echo "Starting ${AGENT} agent in background" 
-    echo "Chromecast: ${CHROMECAST}" 
-    LC_ALL=en_US.UTF-8 ${AGENT} --name "${CHROMECAST}" > /dev/null 2>&1 &
+    LC_ALL=en_US.UTF-8 ${AGENT} > /dev/null 2>&1 &
     echo $! > ${PID_FILE}
 else
     echo "${AGENT} is already running" 
