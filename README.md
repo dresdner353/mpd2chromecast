@@ -70,7 +70,7 @@ Enter device number: 7
 Setting desired Chromecast to [Office]
 volumio@volumio:~$ 
 ```
-This then saves the selected Chronecast name in ~/.castrc. 
+This then saves the selected Chromecast name in ~/.castrc. 
 
 You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
 ```
