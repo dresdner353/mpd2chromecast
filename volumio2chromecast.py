@@ -135,7 +135,7 @@ def web_server():
     # webhook for audio streaming
     # det up for directory serving
     web_conf = {
-       '/': {
+       '/music': {
            'tools.staticdir.on': True,
            'tools.staticdir.dir': '/mnt',
            'tools.staticdir.index': 'index.html',
@@ -158,8 +158,8 @@ def volumio_uri_to_url(server_ip,
         type = "audio/mp3"
     else:
         # Format file URL as path from our web server
-        chromecast_url = "http://%s:8000/%s" % (server_ip,
-                                                uri)
+        chromecast_url = "http://%s:8000/music/%s" % (server_ip,
+                                                      uri)
 
         # Split out extension of file
         # probably not necessary as chromecast seems to work it
@@ -168,7 +168,20 @@ def volumio_uri_to_url(server_ip,
         type = "audio/%s" % (ext.replace('.', ''))
 
     return (chromecast_url, type)
-    
+
+
+def volumio_albumart_to_url(server_ip,
+                            albumart):
+    if albumart.startswith('http'):
+        artwork_url = albumart
+    else:
+        # Format file URL as path to volumio
+        # webserver plus the freaky albumart URI
+        artwork_url = "http://%s/%s" % (server_ip,
+                                        albumart)
+
+    return (artwork_url)  
+
 
 def volumio_agent():
     global gv_server_ip
@@ -202,6 +215,10 @@ def volumio_agent():
             json_resp = resp.json()
             status = json_resp['status']
             uri = json_resp['uri']
+            artist = json_resp['title']
+            album = json_resp['album']
+            title = json_resp['title']
+            albumart = json_resp['albumart']
         except:
             continue
 
@@ -234,6 +251,10 @@ def volumio_agent():
                 cast_device.media_controller.stop()
                 cast_status = status
                 cast_device = None
+
+        # Chromecast URLs for media and artwork
+        chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
+        albumart_url = volumio_albumart_to_url(gv_server_ip, albumart)
 
         # Controller management
         # Handles first creation of the controller and 
@@ -325,7 +346,6 @@ def volumio_agent():
 
             elif (uri != cast_uri):
                 # track switch
-                chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
                 print("Casting URL (paused):%s type:%s" % (
                     chromecast_url.encode('utf-8'),
                     type))
@@ -334,6 +354,8 @@ def volumio_agent():
                 # autoplay = False
                 cast_device.play_media(chromecast_url, 
                                        content_type = type,
+                                       title = title,
+                                       thumb = albumart_url,
                                        autoplay = False)
 
                 # Assume in paused state
@@ -350,15 +372,16 @@ def volumio_agent():
             status == 'play') or
             (status == 'play' and uri != cast_uri)):
 
-            chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
-    
             print("Casting URL:%s type:%s" % (
                 chromecast_url.encode('utf-8'),
                 type))
 
             # Let the magic happen
             cast_device.play_media(chromecast_url, 
-                                   content_type = type)
+                                   content_type = type,
+                                   title = title,
+                                   thumb = albumart_url,
+                                   autoplay = True)
             # unset cast confirmation
             cast_confirmed = 0 
 
