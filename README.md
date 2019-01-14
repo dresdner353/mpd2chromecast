@@ -8,14 +8,15 @@ As you invoke play, stop, pause, next and previous actions on Volumio's Web IF, 
 
 It's not perfect, but it's an OK start :)
 
-
 ## Installation
 
 You'll need Python3 running on the Volumio instance and also pull in cherrypy and pychromecast. 
 
 For a Raspberry Pi, you would need to do the following:
 
+```
 sudo nano /etc/apt/sources.list
+```
 
 and add in these two lines:
 ```
@@ -30,8 +31,7 @@ sudo easy_install3 pip
 sudo pip3 install pychromecast cherrypy
 ```
 
-As volumio user, install the script as follows:
-
+Install the script as follows:
 ```
 cd
 git clone https://github.com/dresdner353/volumio2chromecast.git
@@ -102,9 +102,9 @@ crontab -e
 ```
 
 ## Dynamically switching Chromecast
-When using the saved config approach, the script watches the ~/.castrc file for changes. If it detects a change, it reloads config, reresolves the Chromecast and switches device. It will also try to stop playback on the current device.
+When using the saved config approach, the script watches the ~/.castrc file for changes. If it detects a change, it reloads config, re-resolves the Chromecast and switches device. It will also try to stop playback on the current device.
 
-All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10 seconds, giving time for the change to be detected and discovery of the new device to take place.
+All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10-20 seconds, giving time for the change to be detected and discovery of the new device to take place.
 
 
 
@@ -127,7 +127,7 @@ If the script loses connectivity to the Chromecast it will detect this and try t
 
 To stop the streaming, you clear the queue on Volumio or let the current playlist play out and that will put it into a stopped state on the Volumio end which directs the script to stop casting and release all control over the Chromecast.
 
-I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. It will also work with Chromecast Groups and provide synced playback across the grouped devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references it into URLs. 
+I’ve got this to work fine on the normal Google Chromecast, Chromecast Audio and on Google Home devices. It will also work with Chromecast Groups and provide synced playback across the grouped devices. I did try to get basic artwork working for the video variant but was struggling with converting the Volumio artwork references into URLs. 
 
 ### Syncing playback and the issue of seek
 Just FYI the seek restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
@@ -145,7 +145,7 @@ Volumio will handle a wide range of files natively and work with attached DACs, 
 I've had perfect results on all variants of Chromecast (Video, Audio and Home) with standard MP3 320 and FLAC 2.0 16/44. I did not try raw WAV 16/44 but assume it would also work.
 
 ### FLAC 2.0 24/96
-For 2-channel 24/96 high-res, the normal video Chromecast will play them back but I've noticed it streams into my AVR via HDMI as 48Khz (not certain if that is 16/24 as the AVR does not say). The same 2.0 24/96 seems to stream out of the Chromecast Audio as a SPDIF digital bitstream but will not work with my AVR. It does work with my SMSL headphone amp. So I'm suspecting my Onkyo AVR does not support 24/96 PCM via its SPDIF. But to be clear, I don't know for sure what is coming out from that SPIDF. the headphone amp does not have a display or readout to confirm what it is receiving.
+For 2-channel 24/96 high-res, the normal video Chromecast will play them back but I've noticed it streams into my AVR via HDMI as 48Khz (not certain if that is 16/24 as the AVR does not say). The same 2.0 24/96 seems to stream out of the Chromecast Audio as a SPDIF digital bitstream but will not work with my AVR. It does work with my SMSL headphone amp. So I'm suspecting my Onkyo AVR does not support 24/96 PCM via its SPDIF. But to be clear, I don't know for sure what is coming out from that SPIDF. The headphone amp does not have a display or readout to confirm what it is receiving.
 
 ### FLAC 5.1 24/96
 The normal video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work OK with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. The SPDIF output also worked with my headphone amp but like above I'm not able to confirm what is being output other than my AVR will not play it and my headphone amp will. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
