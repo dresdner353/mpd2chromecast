@@ -14,6 +14,11 @@ You'll need Python3 running on the Volumio instance and also pull in cherrypy an
 
 For a Raspberry Pi, you would need to do the following:
 
+Browse to http://volumio.local/dev and click the enable button for SSH. 
+Then ssh into the device as user volumio, password volumio. 
+
+We now need to add in the main package sources for jessie:
+
 ```
 sudo nano /etc/apt/sources.list
 ```
@@ -24,8 +29,9 @@ deb http://archive.raspberrypi.org/debian/ jessie main
 deb-src http://archive.raspberrypi.org/debian/ jessie main
 ```
 
-Install the Python3 env and required pip packages:
+Update package lists and install the Python3 env and required pip packages:
 ```
+sudo apt-get update
 sudo apt-get install python3 python3-setuptools python3-venv python3-dev
 sudo easy_install3 pip
 sudo pip3 install pychromecast cherrypy
