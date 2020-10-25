@@ -1,6 +1,6 @@
 ## volumio2chromecast
 
-This is a python script you can deploy on a Volumio installation and use it to control playback via a Google Chromecast device.
+This is a python script you can deploy on a Volumio installation and use it to control playback via a Google Chromecast device and all variants such as Google/Nest Home speakers.
 
 The script uses the Volumio API to monitor playback state of the app and then passes a URL for the file to the target Chromecast where it will stream the file directly. It uses pychromecast (https://github.com/balloob/pychromecast) for the Chromecast integration. 
 
@@ -8,7 +8,7 @@ As you invoke play, stop, pause, next and previous actions on Volumio's Web IF, 
 
 It's not perfect, but it's an OK start :)
 
-**Note:** This set of steps was orginally working with standard Volumio releases. Alas, Volumio is still based on Raspian Jesse and it's just too old to keep up with working versions of pychromecast, Python3 and other dependencies. So the installation here only really works on beta Volumio images based on Raspian Buster. I had tried all kinds of approaches to recompiling later Python releases on the Jesse stack and just kept hitting one issue after the other.
+**Note:** This set of steps was orginally working with standard Volumio releases. Alas, Volumio is still based on Raspian Jesse and it's just too old to keep up with working versions of pychromecast, Python3 and other dependencies. So the installation here only really works on beta Volumio images based on Raspian Buster. I had tried all kinds of approaches to recompiling later Python releases on the Jesse stack and just kept hitting one issue after the other. The beta images is by no means perfect and I've seen a few funny behaviours here and there with it. So at this stage, you may need to wait for Volumio devs to get a Buster image available with Volumio if you are expecting more stability.
 
 ## Installation
 
