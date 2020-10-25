@@ -14,76 +14,64 @@ import json
 import socket
 import traceback
 
+def log_message(message):
+    print("%s %s" % (
+        time.asctime(),
+        message))
+    sys.stdout.flush()
+
 # Config inits
 gv_cfg_filename = ""
 gv_chromecast_name = ""
-gv_chromecast_ip = ""
-gv_chromecast_port = 0
 
-
-def resolve_chromecast():
+def get_chromecast():
     global gv_chromecast_name
-    global gv_chromecast_ip
-    global gv_chromecast_port
 
-    print("Discovering Chromecasts.. looking for [%s]" % (gv_chromecast_name))
-    devices = pychromecast.get_chromecasts()
-    
-    cast_device = None
-    for cc in devices:
-        if (cc.device.friendly_name == gv_chromecast_name):
-            cast_device = cc
-            print("Found device.. %s:%d" % (cast_device.host,
-                                            cast_device.port))
-            gv_chromecast_ip = cast_device.host
-            gv_chromecast_port = cast_device.port
-            break
-    
-    
-    if (cast_device is None):
-        print("Unable to find device")
-        sys.exit(-1)
+    if not gv_chromecast_name:
+        return None
 
-    return
+    log_message("Discovering Chromecasts.. looking for [%s]" % (gv_chromecast_name))
+    devices, browser = pychromecast.get_listed_chromecasts(
+            friendly_names=[gv_chromecast_name])
+
+    if len(devices) > 0:
+        log_message("Got device object.. uuid:%s" % (devices[0].uuid))
+        return devices[0]
+    
+    log_message("Failed to get device object")
+    return None
 
 
 def load_config():
     global gv_cfg_filename
     global gv_chromecast_name
 
-    print("Loading config from %s" % (gv_cfg_filename))
+    log_message("Loading config from %s" % (gv_cfg_filename))
     cfg_file = open(gv_cfg_filename, 'r')
     json_str = cfg_file.read()
     json_cfg = json.loads(json_str)
     cfg_file.close()
 
     gv_chromecast_name = json_cfg['chromecast']
-    print("Set Chromecast device to [%s]" % (gv_chromecast_name))
+    log_message("Set Chromecast device to [%s]" % (gv_chromecast_name))
 
     return
 
 
-def config_init(name, ip, port):
-    global gv_chromecast_ip
-    global gv_chromecast_port
+def config_init(name):
     global gv_chromecast_name
     global gv_cfg_filename
 
     gv_chromecast_name = name
-    gv_chromecast_ip = ip
-    gv_chromecast_port = port
 
-    if (gv_chromecast_name == "" and 
-            gv_chromecast_ip == ""):
+    if (gv_chromecast_name == ""):
         # Determine home directory and cfg file
         # given no cmdline args used
         home = os.path.expanduser("~")
         gv_cfg_filename = home + '/.castrc'
         load_config()
 
-    # Resolve name if set
-    if (gv_chromecast_name != ""):
-        resolve_chromecast()
+    return
 
 
 def config_agent():
@@ -97,22 +85,13 @@ def config_agent():
         if os.path.exists(gv_cfg_filename):
             config_last_modified = os.path.getmtime(gv_cfg_filename)
             if config_last_modified > last_check:
-                print("Detected update to %s" % (gv_cfg_filename))
+                log_message("Detected update to %s" % (gv_cfg_filename))
                 load_config()
-                resolve_chromecast()
                 last_check = config_last_modified
 
         time.sleep(5)
 
     return 
-
-
-def get_chromecast_details():
-    global gv_chromecast_ip
-    global gv_chromecast_port
-
-    # return as a tuple
-    return (gv_chromecast_ip, gv_chromecast_port)
 
 
 # dummy stream handler object for cherrypy
@@ -185,10 +164,12 @@ def volumio_albumart_to_url(server_ip,
 
 def volumio_agent():
     global gv_server_ip
+    global gv_chromecast_name
 
     api_session = requests.session()
 
     cast_device = None # initial state
+    cast_name = ""
 
     ctrl_create_count = 0
     failed_status_update_count = 0
@@ -220,12 +201,13 @@ def volumio_agent():
             title = json_resp['title']
             albumart = json_resp['albumart']
         except:
+            log_message('Problem getting volumio status')
             continue
 
-        volumio_status_str = json.dumps(json_resp, indent = 4)
-        print("\n%s Volumio State:\n%s\n" % (
-            time.asctime(),
-            volumio_status_str))
+        log_message("Volumio State:\n%s\n" % (
+            json.dumps(
+                json_resp, 
+                indent = 4)))
 
         # remove leading 'music-library' or 'mnt' if present
         # we're hosting from /mnt so we need remove the top-level
@@ -237,24 +219,28 @@ def volumio_agent():
 
         volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
 
-        # Configured Chromecast host and port
-        # This can update on the fly so we seek to 
-        # detect this
-        (host, port) = get_chromecast_details()
-        if (cc_host != host or cc_port != port):
-            cc_host = host
-            cc_port = port
-
+        # Configured Chromecast change
+        log_message("Current Device:%s Configured Device:%s" % (
+            cast_name,
+            gv_chromecast_name))
+        if cast_name != gv_chromecast_name:
+            log_message("Detected device change from %s -> %s" % (
+                cast_name,
+                gv_chromecast_name))
             # Stop media player of existing device
             # if it exists
-            if (cast_device is not None):
+            if (cast_device):
+                log_message("Stopping casting via %s" % (cast_name))
                 cast_device.media_controller.stop()
+                cast_device.quit_app()
                 cast_status = status
                 cast_device = None
 
         # Chromecast URLs for media and artwork
         chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
         albumart_url = volumio_albumart_to_url(gv_server_ip, albumart)
+        log_message("Stream URL:%s" % (chromecast_url))
+        log_message("Album Art URL:%s" % (albumart_url))
 
         # Controller management
         # Handles first creation of the controller and 
@@ -262,25 +248,27 @@ def volumio_agent():
         # also only does this if we're in a play state
         if (status == 'play' and 
                 cast_device is None):
-            print("%s Connecting to Chromecast %s:%d" % (
-                time.asctime(), 
-                cc_host, 
-                cc_port))
-            cast_device = pychromecast.Chromecast(cc_host, cc_port)
+            log_message("Connecting to Chromecast %s" % (
+                gv_chromecast_name))
+            cast_device = get_chromecast()
+            cast_name = gv_chromecast_name
+
+            if not cast_device:
+                log_message("Failed to get cast device object")
+                continue
 
             # Kill off any current app
-            print("%s Waiting for device to get ready.." % (time.asctime()))
+            log_message("Waiting for device to get ready..")
             if not cast_device.is_idle:
-                print("Killing current running app")
-                cast.quit_app()
+                log_message("Killing current running app")
+                cast_device.quit_app()
 
             while not cast_device.is_idle:
                 time.sleep(1)
 
-            print("%s Connected to %s (%s) model:%s" % (
-                time.asctime(), 
+            log_message("Connected to %s (%s) model:%s" % (
                 cast_device.name,
-                cast_device.uri,
+                cast_device.uuid,
                 cast_device.model_name))
 
             ctrl_create_count += 1
@@ -295,8 +283,8 @@ def volumio_agent():
         # Skip remainder of loop if we have no device to 
         # handle. This will happen if we are in an initial stopped or 
         # paused state or ended up in these states for a long period
-        if (cast_device is None):
-            print("%s No active Chromecast device" % (time.asctime()))
+        if (not cast_device):
+            log_message("No active Chromecast device")
             continue
 
         # Detection of Events from Volumio
@@ -308,7 +296,7 @@ def volumio_agent():
         if (cast_volume != volume and
                 cast_status == 'play'):
 
-            print("Setting Chromecast Volume: %.2f" % (volume))
+            log_message("Setting Chromecast Volume: %.2f" % (volume))
             cast_device.set_volume(volume)
             cast_volume = volume
     
@@ -316,7 +304,7 @@ def volumio_agent():
         if (cast_status != 'pause' and
             status == 'pause'):
 
-            print("Pausing Chromecast")
+            log_message("Pausing Chromecast")
             cast_device.media_controller.pause()
             cast_status = status
         
@@ -324,7 +312,7 @@ def volumio_agent():
         if (cast_status == 'pause' and 
             status == 'play'):
 
-            print("Unpause Chromecast")
+            log_message("Unpause Chromecast")
             cast_device.media_controller.play()
             cast_status = status
         
@@ -339,14 +327,14 @@ def volumio_agent():
             if (uri == ''):
                 # normal stop no next track set
                 # We can also ditch the device
-                print("Stop Chromecast")
+                log_message("Stop Chromecast")
                 cast_device.media_controller.stop()
                 cast_status = status
                 cast_device = None
 
             elif (uri != cast_uri):
                 # track switch
-                print("Casting URL (paused):%s type:%s" % (
+                log_message("Casting URL (paused):%s type:%s" % (
                     chromecast_url.encode('utf-8'),
                     type))
 
@@ -372,17 +360,24 @@ def volumio_agent():
             status == 'play') or
             (status == 'play' and uri != cast_uri)):
 
-            print("Casting URL:%s type:%s" % (
+            log_message("Casting URL:%s type:%s" % (
                 chromecast_url.encode('utf-8'),
                 type))
 
             # Let the magic happen
-            cast_device.play_media(chromecast_url, 
-                                   content_type = type,
-                                   title = title,
-                                   thumb = albumart_url,
-                                   autoplay = True)
+            # Wait for the connection and then issue the 
+            # URL to stream
+            cast_device.wait()
+            cast_device.media_controller.play_media(
+                    chromecast_url, 
+                    content_type = type,
+                    title = title,
+                    thumb = albumart_url,
+                    autoplay = True)
+
             # unset cast confirmation
+            # Will be set again once we confirm 
+            # it is streaming
             cast_confirmed = 0 
 
             # Note the various specifics of play 
@@ -402,12 +397,11 @@ def volumio_agent():
                 cast_device.media_controller.update_status()
             except:
                 failed_status_update_count += 1
-                print("%s Failed to get chromecast status.. %d/5" % (
-                    time.asctime(),
+                log_message("Failed to get chromecast status.. %d/5" % (
                     failed_status_update_count))
 
                 if (failed_status_update_count >= 5):
-                    print("%s Detected broken controller after 5 failures to get status" % (time.asctime()))
+                    log_message("Detected broken controller after 5 failures to get status")
                     cast_device = None
                     cast_status = 'none'
                     cast_uri = 'none'
@@ -434,8 +428,7 @@ def volumio_agent():
             elapsed_secs = cast_elapsed % 60
             duration_mins = int(duration / 60)
             duration_secs = duration % 60
-            print("%s Chromecast.. Instance:%d Confirmed:%d State:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
-                time.asctime(),
+            log_message("Chromecast.. Instance:%d Confirmed:%d State:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
                 ctrl_create_count,
                 cast_confirmed,
                 status,
@@ -454,14 +447,14 @@ def volumio_agent():
             # Detect end of play on chromecast
             # and nudge next song in playlist
             # We combine detection of idle state
-            # and a previously casr_confirmed.
+            # and a previously cast_confirmed.
             # Otherwise we will get false positives after 
             # just starting playing and may skip tracks 
             # before they actually start.
             if (status == 'play' and 
                     cast_confirmed == 1 and 
                     cast_device.media_controller.status.player_is_idle):
-                print("%s Request Next song" % (time.asctime()))
+                log_message("Request Next song")
                 cast_confirmed = 0
                 resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=next')
 
@@ -479,7 +472,7 @@ def volumio_agent():
                     cast_elapsed % 10 == 0 and 
                     progress < 50 and
                     not cast_uri.startswith('http')):
-                print("%s Sync Chromecast elapsed %d secs to Volumio" % (time.asctime(), cast_elapsed))
+                log_message("Sync Chromecast elapsed %d secs to Volumio" % (cast_elapsed))
                 resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (cast_elapsed))
     
 
@@ -494,29 +487,11 @@ parser.add_argument('--name',
                     default = "",
                     required = False)
 
-parser.add_argument('--ip', 
-                    help = 'Chromecast IP Address', 
-                    default = "",
-                    required = False)
-
-parser.add_argument('--port', 
-                    help = 'Chromecast Port (default:8009)', 
-                    default = 8009,
-                    type = int,
-                    required = False)
-
 args = vars(parser.parse_args())
 gv_chromecast_name = args['name']
-gv_chromecast_ip = args['ip']
-gv_chromecast_port = args['port']
 
 # Init config
-# This will set the desired IP and port,
-# resolve the desired name to an IP and port
-# or fallback on setting up the global config file
-config_init(gv_chromecast_name,
-        gv_chromecast_ip,
-        gv_chromecast_port)
+config_init(gv_chromecast_name)
 
 # Determine the main IP address of the server
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -555,7 +530,7 @@ while (1):
              dead_threads += 1
 
     if (dead_threads > 0):
-        print("Detected %d dead threads.. exiting" % (dead_threads))
+        log_message("Detected %d dead threads.. exiting" % (dead_threads))
         sys.exit(-1);
 
     time.sleep(5)
