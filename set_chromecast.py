@@ -25,7 +25,7 @@ home = os.path.expanduser("~")
 # Scan if no device specified
 if (cast_name == ""):
     print("Discovering Chromecasts.. (this may take a while)")
-    devices = pychromecast.get_chromecasts()
+    devices, browser = pychromecast.get_chromecasts()
     total_devices = len(devices)
     print("Found %d devices" % (total_devices))
     if (total_devices > 0):
