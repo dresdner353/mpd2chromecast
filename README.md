@@ -8,12 +8,13 @@ As you invoke play, stop, pause, next and previous actions on Volumio's Web IF, 
 
 It's not perfect, but it's an OK start :)
 
-**Note:** This set of steps was orginally working with standard Volumio releases. Alas, Volumio is still based on Raspian Jesse and it's just to old to keep up with working versions of pychromecast, Python3 and other dependencies. So the installation here only really works on beta Volumio images based on Raspian Buster. I had tried all kinds of approaches to recompiling later Python releases on the Jesse stack and just kept hitting one issue after the other.
+**Note:** This set of steps was orginally working with standard Volumio releases. Alas, Volumio is still based on Raspian Jesse and it's just too old to keep up with working versions of pychromecast, Python3 and other dependencies. So the installation here only really works on beta Volumio images based on Raspian Buster. I had tried all kinds of approaches to recompiling later Python releases on the Jesse stack and just kept hitting one issue after the other.
 
 ## Installation
 
 Download the Buster beta image:
 https://community.volumio.org/t/volumio-debian-buster-beta-raspi-images-debugging/11988
+
 Usual flash process applies for the install.
 
 After instalation, browse to http://volumio.local/dev and enable the SSH option. Then ssh into the box as volumio@volumio.local, password "volumio" and follow the commands below..
@@ -42,7 +43,9 @@ Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because
 
 ## Starting the Agent in the Background
 
-You should first run the set_chromecast.py script to perform a scan of the available Chromecast devices on your network and then make your selection by number. The results shown will be for both detected Chromecasts and any cast groups you may have created.. yes multi-room will work here :).
+You should first run the set_chromecast.py script to perform a scan of the available Chromecast devices on your network and then make your selection by number. 
+
+**Note:** The results shown will be for both detected Chromecasts and any cast groups you may have created.. yes multi-room will work here :).
 
 For example:
 ```
@@ -107,22 +110,20 @@ The config thread is there to do one thing and that is detect changes in ~/.cast
 
 The web server thread is there to serve up music files stored locally as URLs to the target Chromecasts.
 
-When the python script is run at the console, the script will start showing the current Volumio JSON state every second. It gets this by calling the RESTful API function http://localhost:3000/api/v1/getstate
-
-The Volumio thread runs in a permanent loop, checking the Volumio playback state and from there, auto casts the playing file URL to the target Chromecast. It responds to play/stop, track and volume changes in real-time. So as you use the Volumio interface to select the desired music, it will immediately stream via the target Chromecasts. 
+The Volumio thread runs in a permanent loop, checking the Volumio playback state every second and from there, auto casts the playing file URL to the target Chromecast. It responds to play/stop, track and volume changes in real-time. So as you use the Volumio interface to select the desired music, stop/pause/etc it will immediately match the same action via the target Chromecast or cast group. 
 
 ### Syncing playback and the issue of seek
 Just FYI.. you cannot use the seek option of Volumio to fast forward to a particular section of a track. 
 
-This restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
+This restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file real-time via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
 
-If both are left to their own devices, the Volumio playback is likely to end first. That will cause volumio to move to the next track. As a result, the script detects the change and instructs the Chromecast to play the next track before it finished streaming the current one. 
+If both are left to their own devices, the Volumio playback is likely to end first. That will cause volumio to move to the next track. As a result, the script detects the change and instructs the Chromecast to play the next track possibly before it finished streaming the current one. 
 
-The approach I took was to force 10-second syncs, where the elapsed time as reported from the Chromecast is used to perform a local seek on Volumio and get it back in sync and likely behind by 1-2 seconds. The cool thing is that once the Chromecast finishes playback, it's idle state is quickly detected and the script invokes the next track via the Volumio API. This syncing only continues each 10 seconds until the track passes 50% progress. At that stage, its safe to leave it alone.
+The approach I took to prevent this race condition was to force 10-second syncs, where the elapsed time as reported from the Chromecast is used to perform a local seek on Volumio and get it back in sync as close as possible, but usually 1-2 seconds behind the Chromecast. The cool thing is that once the Chromecast finishes playback, it's idle state is detected and the script invokes the next track request via the Volumio API. This syncing game only continues each 10 seconds until the track passes 50% progress. At that stage, its safe to leave it alone.
 
-Visually what you see on the Volumio I/F is track time progress as the playback continues and a little niggle every 10 seconds as the sync takes place. So you can’t really listen to the native playback as it will experience drops every 30 seconds with the sync. But in fairness the objective is to listen via the Chromecast.
+Visually what you see on the Volumio I/F is track time progress as the playback starts and then a little niggle after 10 seconds as the sync takes place. There may be other blips after that as things re-sync every 10 seconds. So you can’t really listen to the native playback as it will experience drops with the syncs. But in fairness the objective is to listen via the Chromecast.
 
-Also, if during playback, you go and seek further on via Volumio GUI, within 10 seconds it will reset itself back to where the Chromecast progress is. For that reason, we don’t (yet) have a reliable way of having a Volumio seek translate into a seek on the Chromecast. But it is something I’d like to tackle at some point.
+Also, if during playback, you go and seek further on via Volumio GUI, it will have no effect on the Chromecast but within 10 seconds Volumio will reset itself back to where the Chromecast progress is. For that reason, we don’t have a reliable way of having a Volumio seek translate into a seek on the Chromecast.
 
 ## File types that work
 Volumio will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer. We're serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
@@ -135,7 +136,5 @@ For 2-channel 24/96 high-res, the normal video Chromecast will play them back bu
 
 ### FLAC 5.1 24/96
 The normal video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work OK with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. The SPDIF output also worked with my headphone amp but like above I'm not able to confirm what is being output other than my AVR will not play it and my headphone amp will. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
-
-Either way, a Chromecast Audio with its optical SPIDF is not going to support 5.1 24/96 lossless. If we want 5.1 24/96 playback via Chromecast, the only logical way to see that get realised if it plays via the HDMI variant and streams to the AVR as multichannel PCM. I'm hoping the Chocolate Factory will go this route eventually. It might be something the Chromecast Ultra can do but alas I don't have one to hand.
 
 So I hope you find this useful for you if you are trying to get Volumio to play nice with Chromecast. 
