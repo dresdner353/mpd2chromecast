@@ -112,18 +112,7 @@ The web server thread is there to serve up music files stored locally as URLs to
 
 The Volumio thread runs in a permanent loop, checking the Volumio playback state every second and from there, auto casts the playing file URL to the target Chromecast. It responds to play/stop, track and volume changes in real-time. So as you use the Volumio interface to select the desired music, stop/pause/etc it will immediately match the same action via the target Chromecast or cast group. 
 
-### Syncing playback and the issue of seek
-Just FYI.. you cannot use the seek option of Volumio to fast forward to a particular section of a track. 
-
-This restriction relates to how I had to sync Volumio playback with that of the Chromecast. When you instruct Volumio to play a file, it really is playing the file real-time via the default audio device. The progress of that playback starts as soon as you hit play. But the Chromecast playback is on it’s own timing and subject to how long it takes the Chromecast to receive and react to the streaming request and start streaming the file. 
-
-If both are left to their own devices, the Volumio playback is likely to end first. That will cause volumio to move to the next track. As a result, the script detects the change and instructs the Chromecast to play the next track possibly before it finished streaming the current one. 
-
-The approach I took to prevent this race condition was to force 10-second syncs, where the elapsed time as reported from the Chromecast is used to perform a local seek on Volumio and get it back in sync as close as possible, but usually 1-2 seconds behind the Chromecast. The cool thing is that once the Chromecast finishes playback, it's idle state is detected and the script invokes the next track request via the Volumio API. This syncing game only continues each 10 seconds until the track passes 50% progress. At that stage, its safe to leave it alone.
-
-Visually what you see on the Volumio I/F is track time progress as the playback starts and then a little niggle after 10 seconds as the sync takes place. There may be other blips after that as things re-sync every 10 seconds. So you can’t really listen to the native playback as it will experience drops with the syncs. But in fairness the objective is to listen via the Chromecast.
-
-Also, if during playback, you go and seek further on via Volumio GUI, it will have no effect on the Chromecast but within 10 seconds Volumio will reset itself back to where the Chromecast progress is. For that reason, we don’t have a reliable way of having a Volumio seek translate into a seek on the Chromecast.
+Seek will also work if you use Volumio to skip forward or backward within the playing track, the script will force the Chromecast to seek the same point in the stream. Also during playback every 10 seconds, the Chromecast current elapsed time position is synced back to Volumio. This is to ensure that Volumio is playing back slightly behind the Chromecast. So if you are listening via local Audio output, expect to hear skips every 10 seconds as the playback syncs up.
 
 ## File types that work
 Volumio will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer. We're serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
