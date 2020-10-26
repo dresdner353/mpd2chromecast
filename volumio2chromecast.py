@@ -30,12 +30,14 @@ def get_chromecast():
     if not gv_chromecast_name:
         return None
 
-    log_message("Discovering Chromecasts.. looking for [%s]" % (gv_chromecast_name))
+    log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
     devices, browser = pychromecast.get_listed_chromecasts(
             friendly_names=[gv_chromecast_name])
 
     if len(devices) > 0:
-        log_message("Got device object.. uuid:%s" % (devices[0].uuid))
+        log_message("Got device object.. uuid:%s model:%s" % (
+            devices[0].uuid,
+            devices[0].model_name))
         return devices[0]
     
     log_message("Failed to get device object")
@@ -112,7 +114,8 @@ def web_server():
     cherrypy.server.socket_port = 8000
 
     # webhook for audio streaming
-    # det up for directory serving
+    # set up for directory serving
+    # via /mnt
     web_conf = {
        '/music': {
            'tools.staticdir.on': True,
@@ -152,6 +155,7 @@ def volumio_uri_to_url(server_ip,
 def volumio_agent():
     global gv_server_ip
     global gv_chromecast_name
+    global gv_verbose
 
     api_session = requests.session()
 
@@ -171,6 +175,7 @@ def volumio_agent():
     while (1):
         # 1 sec delay per iteration
         time.sleep(1)
+        print() # log output separator
 
         # Get status from Volumio
         # Added exception protection to blanket 
@@ -179,41 +184,53 @@ def volumio_agent():
         try:
             resp = api_session.get('http://localhost:3000/api/v1/getstate')
             json_resp = resp.json()
-            #log_message(json.dumps(json_resp, indent = 4))
-
-            status = json_resp['status']
-            volumio_seek = int(json_resp['seek'] / 1000)
-            last_volumio_seek = volumio_seek
-            duration = json_resp['duration']
-            uri = json_resp['uri']
-            artist = json_resp['artist']
-            album = json_resp['album']
-            title = json_resp['title']
-
-            elapsed_mins = int(volumio_seek / 60)
-            elapsed_secs = volumio_seek % 60
-            duration_mins = int(duration / 60)
-            duration_secs = duration % 60
-            if duration > 0:
-                progress = int(volumio_seek / duration * 100)
-            else:
-                progress = 0
-
-            log_message("Playing %s/%s/%s" % (
-                artist,
-                album,
-                title))
-
-            log_message("Volumio Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
-                status,
-                elapsed_mins,
-                elapsed_secs,
-                duration_mins,
-                duration_secs,
-                progress))
+            if gv_verbose:
+                log_message(json.dumps(json_resp, indent = 4))
         except:
             log_message('Problem getting volumio status')
             continue
+
+        status = json_resp['status']
+        volumio_seek = int(json_resp['seek'] / 1000)
+        last_volumio_seek = volumio_seek
+        uri = json_resp['uri']
+
+        # optional fields depending on what 
+        # is playing such as streams vs music files
+        artist = 'None'
+        album = 'None'
+        title = 'None'
+        duration = 0
+        if 'artist' in json_resp:
+            artist = json_resp['artist']
+        if 'album' in json_resp:
+            album = json_resp['album']
+        if 'title' in json_resp:
+            title = json_resp['title']
+        if 'duration' in json_resp:
+            duration = json_resp['duration']
+
+        elapsed_mins = int(volumio_seek / 60)
+        elapsed_secs = volumio_seek % 60
+        duration_mins = int(duration / 60)
+        duration_secs = duration % 60
+        if duration > 0:
+            progress = int(volumio_seek / duration * 100)
+        else:
+            progress = 0
+
+        log_message("Playing %s/%s/%s" % (
+            artist,
+            album,
+            title))
+
+        log_message("Volumio Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
+            status,
+            elapsed_mins,
+            elapsed_secs,
+            duration_mins,
+            duration_secs,
+            progress))
 
         # remove leading 'music-library' or 'mnt' if present
         # we're hosting from /mnt so we need remove the top-level
@@ -227,13 +244,12 @@ def volumio_agent():
 
         # Configured Chromecast change
         if cast_name != gv_chromecast_name:
-            log_message("Detected Chromecast change from %s -> %s" % (
-                cast_name,
-                gv_chromecast_name))
             # Stop media player of existing device
             # if it exists
             if (cast_device):
-                log_message("Stopping casting via %s" % (cast_name))
+                log_message("Detected Chromecast change from %s -> %s" % (
+                    cast_name,
+                    gv_chromecast_name))
                 cast_device.media_controller.stop()
                 cast_device.quit_app()
                 cast_status = status
@@ -249,8 +265,6 @@ def volumio_agent():
         # also only does this if we're in a play state
         if (status == 'play' and 
                 cast_device is None):
-            log_message("Connecting to Chromecast %s" % (
-                gv_chromecast_name))
             cast_device = get_chromecast()
             cast_name = gv_chromecast_name
 
@@ -266,11 +280,6 @@ def volumio_agent():
 
             while not cast_device.is_idle:
                 time.sleep(1)
-
-            log_message("Connected to %s (%s) model:%s" % (
-                cast_device.name,
-                cast_device.uuid,
-                cast_device.model_name))
 
             # Cast state inits
             cast_status = 'none'
@@ -417,7 +426,7 @@ def volumio_agent():
             elapsed_secs = cast_elapsed % 60
             duration_mins = int(duration / 60)
             duration_secs = duration % 60
-            log_message("Chromecast Name:%s Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]\n" % (
+            log_message("Chromecast Name:%s Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
                 status,
                 elapsed_mins,
@@ -467,8 +476,14 @@ parser.add_argument('--name',
                     default = "",
                     required = False)
 
+parser.add_argument('--verbose', 
+                    help = 'Enable verbose output', 
+                    action = 'store_true')
+
+
 args = vars(parser.parse_args())
 gv_chromecast_name = args['name']
+gv_verbose = args['verbose']
 
 # Init config
 config_init(gv_chromecast_name)
