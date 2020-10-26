@@ -253,6 +253,8 @@ def volumio_agent():
             # So we give it a tolerance of 5 consecutive failures
             try:
                 cast_device.media_controller.update_status()
+                # Reset failed status count
+                failed_status_update_count = 0
             except:
                 failed_status_update_count += 1
                 log_message("Failed to get chromecast status.. %d/5" % (
@@ -266,9 +268,6 @@ def volumio_agent():
                     cast_volume = 0
                     failed_status_update_count = 0
                     continue
-
-            # Reset failed status count
-            failed_status_update_count = 0
 
             cast_elapsed = int(cast_device.media_controller.status.current_time)
 
