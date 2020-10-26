@@ -149,19 +149,6 @@ def volumio_uri_to_url(server_ip,
     return (chromecast_url, type)
 
 
-def volumio_albumart_to_url(server_ip,
-                            albumart):
-    if albumart.startswith('http'):
-        artwork_url = albumart
-    else:
-        # Format file URL as path to volumio
-        # webserver plus the freaky albumart URI
-        artwork_url = "http://%s/%s" % (server_ip,
-                                        albumart)
-
-    return (artwork_url)  
-
-
 def volumio_agent():
     global gv_server_ip
     global gv_chromecast_name
@@ -171,17 +158,15 @@ def volumio_agent():
     cast_device = None # initial state
     cast_name = ""
 
-    ctrl_create_count = 0
     failed_status_update_count = 0
-
-    cc_host = ""
-    cc_port = 0
 
     # Cast state inits
     cast_status = 'none'
     cast_uri = 'none'
     cast_volume = 0
-    cast_confirmed = 0
+
+    last_volumio_seek = 0
+    volumio_seek = 0
     
     while (1):
         # 1 sec delay per iteration
@@ -194,20 +179,41 @@ def volumio_agent():
         try:
             resp = api_session.get('http://localhost:3000/api/v1/getstate')
             json_resp = resp.json()
+            #log_message(json.dumps(json_resp, indent = 4))
+
             status = json_resp['status']
+            volumio_seek = int(json_resp['seek'] / 1000)
+            last_volumio_seek = volumio_seek
+            duration = json_resp['duration']
             uri = json_resp['uri']
-            artist = json_resp['title']
+            artist = json_resp['artist']
             album = json_resp['album']
             title = json_resp['title']
-            albumart = json_resp['albumart']
+
+            elapsed_mins = int(volumio_seek / 60)
+            elapsed_secs = volumio_seek % 60
+            duration_mins = int(duration / 60)
+            duration_secs = duration % 60
+            if duration > 0:
+                progress = int(volumio_seek / duration * 100)
+            else:
+                progress = 0
+
+            log_message("Playing %s/%s/%s" % (
+                artist,
+                album,
+                title))
+
+            log_message("Volumio Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
+                status,
+                elapsed_mins,
+                elapsed_secs,
+                duration_mins,
+                duration_secs,
+                progress))
         except:
             log_message('Problem getting volumio status')
             continue
-
-        log_message("Volumio State:\n%s\n" % (
-            json.dumps(
-                json_resp, 
-                indent = 4)))
 
         # remove leading 'music-library' or 'mnt' if present
         # we're hosting from /mnt so we need remove the top-level
@@ -220,11 +226,8 @@ def volumio_agent():
         volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
 
         # Configured Chromecast change
-        log_message("Current Device:%s Configured Device:%s" % (
-            cast_name,
-            gv_chromecast_name))
         if cast_name != gv_chromecast_name:
-            log_message("Detected device change from %s -> %s" % (
+            log_message("Detected Chromecast change from %s -> %s" % (
                 cast_name,
                 gv_chromecast_name))
             # Stop media player of existing device
@@ -238,9 +241,7 @@ def volumio_agent():
 
         # Chromecast URLs for media and artwork
         chromecast_url, type = volumio_uri_to_url(gv_server_ip, uri)
-        albumart_url = volumio_albumart_to_url(gv_server_ip, albumart)
-        log_message("Stream URL:%s" % (chromecast_url))
-        log_message("Album Art URL:%s" % (albumart_url))
+        #log_message("Stream URL:%s" % (chromecast_url))
 
         # Controller management
         # Handles first creation of the controller and 
@@ -271,13 +272,10 @@ def volumio_agent():
                 cast_device.uuid,
                 cast_device.model_name))
 
-            ctrl_create_count += 1
-
             # Cast state inits
             cast_status = 'none'
             cast_uri = 'none'
             cast_volume = 0
-            cast_confirmed = 0
 
 
         # Skip remainder of loop if we have no device to 
@@ -343,7 +341,6 @@ def volumio_agent():
                 cast_device.play_media(chromecast_url, 
                                        content_type = type,
                                        title = title,
-                                       thumb = albumart_url,
                                        autoplay = False)
 
                 # Assume in paused state
@@ -351,7 +348,6 @@ def volumio_agent():
                 # out of this assumed paused state
                 cast_status = 'pause'
                 cast_uri = uri
-                cast_confirmed = 0 
 
     
 
@@ -372,13 +368,7 @@ def volumio_agent():
                     chromecast_url, 
                     content_type = type,
                     title = title,
-                    thumb = albumart_url,
                     autoplay = True)
-
-            # unset cast confirmation
-            # Will be set again once we confirm 
-            # it is streaming
-            cast_confirmed = 0 
 
             # Note the various specifics of play 
             cast_status = status
@@ -406,7 +396,6 @@ def volumio_agent():
                     cast_status = 'none'
                     cast_uri = 'none'
                     cast_volume = 0
-                    cast_confirmed = 0
                     failed_status_update_count = 0
                     continue
 
@@ -428,9 +417,8 @@ def volumio_agent():
             elapsed_secs = cast_elapsed % 60
             duration_mins = int(duration / 60)
             duration_secs = duration % 60
-            log_message("Chromecast.. Instance:%d Confirmed:%d State:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
-                ctrl_create_count,
-                cast_confirmed,
+            log_message("Chromecast Name:%s Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]\n" % (
+                cast_name,
                 status,
                 elapsed_mins,
                 elapsed_secs,
@@ -438,43 +426,35 @@ def volumio_agent():
                 duration_secs,
                 progress))
 
-            # Confirm successful casting after observing 5 seconds play
-            # Plays a role in better detecting idle state for next song
-            if (status == 'play' and 
-                    cast_elapsed > 5):
-                cast_confirmed = 1
-
             # Detect end of play on chromecast
-            # and nudge next song in playlist
-            # We combine detection of idle state
-            # and a previously cast_confirmed.
-            # Otherwise we will get false positives after 
-            # just starting playing and may skip tracks 
-            # before they actually start.
             if (status == 'play' and 
-                    cast_confirmed == 1 and 
+                    volumio_seek >= 5000 and 
                     cast_device.media_controller.status.player_is_idle):
                 log_message("Request Next song")
-                cast_confirmed = 0
                 resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=next')
 
-
-            # sync local progress every 10 seconds
-            # This is not exact and will likely keep volumio behind.
-            # However we want to avoid volumio playback progress charging ahead 
-            # of the chromecast progress as it could change track before the 
-            # chromecast completes it playback.
-            # We also limit this sync to confirmed casts and put a stop at 50% progress
-            # as we'll be close enough by then.
-            # We also ignore radio strems as sync does not apply to them
+            # Detect a skip on Volumio
+            # After we have done the initial sync from Chromecast
+            # and where the difference between elapsed times >= 10 
+            # seconds
             if (status == 'play' and 
-                    cast_confirmed == 1 and 
-                    cast_elapsed % 10 == 0 and 
-                    progress < 50 and
-                    not cast_uri.startswith('http')):
-                log_message("Sync Chromecast elapsed %d secs to Volumio" % (cast_elapsed))
-                resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (cast_elapsed))
+                    not cast_uri.startswith('http') and 
+                    abs(volumio_seek - cast_elapsed) >= 10):
+                log_message(
+                        "Sync Volumio elapsed %d secs to Chromecast" % (
+                            volumio_seek))
+                cast_device.media_controller.seek(volumio_seek)
     
+            elif (status == 'play' and 
+                    not cast_uri.startswith('http') and
+                    cast_elapsed % 10 == 0):
+                    log_message(
+                            "Sync Chromecast elapsed %d secs to Volumio" % (
+                                cast_elapsed))
+                    resp = api_session.get(
+                            'http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (
+                                cast_elapsed))
+
 
 
 # main
