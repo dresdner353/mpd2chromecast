@@ -69,7 +69,7 @@ To get the script running on a terminal, just do the following:
 ```
 LC_ALL=en_US.UTF-8  ~/volumio2chromecast/volumio2chromecast.py 
 ```
-In this mode, the script will output data every second showing Volumio playback status and any related activity from the Chromecast. Once you have the script running, it should start tying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
+In this mode, the script will output data every second showing Volumio playback status and any related activity from the Chromecast. Once you have the script running, it should start trying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
 
 Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because when left on my default locale (Ireland UTF-8), something went wrong with how UTF-8 characters we being matched between filenames on the disk and the URLs. I suspect it relates to locale specifics not present within the Raspian image. Forcing US UTF-8 sorts this however.
 
