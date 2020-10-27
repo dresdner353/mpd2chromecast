@@ -161,8 +161,9 @@ def web_server():
     cherrypy.engine.block()
 
 
-def volumio_uri_to_url(server_ip,
-                       uri):
+def volumio_uri_to_url(
+        server_ip,
+        uri):
     # Radio/external stream
     # uri will start with http
     if uri.startswith('http'):
@@ -181,6 +182,23 @@ def volumio_uri_to_url(server_ip,
         type = "audio/%s" % (ext.replace('.', ''))
 
     return (cast_url, type)
+
+
+def volumio_albumart_to_url(
+        server_ip,
+        albumart):
+
+    if albumart.startswith('http'):
+        artwork_url = albumart
+    else:
+        # Format file URL as path to volumio
+        # webserver plus the freaky albumart URI
+        # This served from port 3001
+        artwork_url = "http://%s:3001%s" % (
+                server_ip,
+                albumart)
+
+    return artwork_url
 
 
 def volumio_agent():
@@ -224,6 +242,7 @@ def volumio_agent():
         volumio_seek = int(json_resp['seek'] / 1000)
         last_volumio_seek = volumio_seek
         uri = json_resp['uri']
+        albumart = json_resp['albumart']
         volumio_volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
         volumio_mute = json_resp['mute']
 
@@ -275,7 +294,7 @@ def volumio_agent():
 
         # Chromecast URLs for media and artwork
         cast_url, type = volumio_uri_to_url(gv_server_ip, uri)
-        #log_message("Stream URL:%s" % (cast_url))
+        albumart_url = volumio_albumart_to_url(gv_server_ip, albumart)
 
         # Chromecast Status
         if (cast_device):
@@ -432,13 +451,12 @@ def volumio_agent():
             # Let the magic happen
             # Wait for the connection and then issue the 
             # URL to stream
-            # current time option not vible as track name
-            # changes before the seek data is updated
             cast_device.wait()
             cast_device.media_controller.play_media(
                     cast_url, 
                     content_type = type,
                     title = title,
+                    thumb = albumart_url,
                     #current_time = volumio_seek,
                     autoplay = True)
 
