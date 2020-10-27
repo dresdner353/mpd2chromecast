@@ -96,6 +96,36 @@ def config_agent():
     return 
 
 
+def chromecast_agent():
+    last_check = 0
+
+    home = os.path.expanduser("~")
+    discovered_devices_file = home + '/.castdevices'
+
+    # 5-second check for config changes
+    while (1):
+        devices, browser = pychromecast.get_chromecasts()
+        total_devices = len(devices)
+        log_message("Discovered %d chromecasts" % (
+            total_devices))
+
+        index = 0
+        f = open(discovered_devices_file, "w")
+        for cc in devices:
+            index += 1
+            log_message("%d/%d %s" % (
+                index, 
+                total_devices,
+                cc.device.friendly_name))
+            f.write("%s\n" % (cc.device.friendly_name))
+
+        f.close()
+
+        # only repeat once every 30 seconds
+        time.sleep(30)
+
+    return 
+
 # dummy stream handler object for cherrypy
 class stream_handler(object):
     pass
@@ -489,14 +519,17 @@ volumio_t.daemon = True
 volumio_t.start()
 thread_list.append(volumio_t)
 
-if (gv_cfg_filename != ""):
-    # Config server thread if we're set to 
-    # drive config from a file. that we we can 
-    # handle updates
-    config_t = threading.Thread(target = config_agent)
-    config_t.daemon = True
-    config_t.start()
-    thread_list.append(config_t)
+# Config Agent
+config_t = threading.Thread(target = config_agent)
+config_t.daemon = True
+config_t.start()
+thread_list.append(config_t)
+
+# Chromecast Agent
+chromecast_t = threading.Thread(target = chromecast_agent)
+chromecast_t.daemon = True
+chromecast_t.start()
+thread_list.append(chromecast_t)
 
 while (1):
     dead_threads = 0
