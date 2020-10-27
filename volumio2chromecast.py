@@ -172,11 +172,13 @@ def volumio_agent():
 
     last_volumio_seek = 0
     volumio_seek = 0
+    cast_timestamp = 0
     
     while (1):
         # 1 sec delay per iteration
         time.sleep(1)
         print() # log output separator
+        now = int(time.time())
 
         # Get status from Volumio
         try:
@@ -400,24 +402,26 @@ def volumio_agent():
             # Note the various specifics of play 
             cast_status = status
             cast_uri = uri
+            cast_timestamp = now
             continue
     
 
-        # Detect end of play on chromecast first
-        if (status == 'play' and 
-                cast_status == 'play' and
-                cast_device.media_controller.status.player_is_idle):
-            log_message("Chromecast idle.. Request Next song")
-            resp = api_session.get('http://localhost:3000/api/v1/commands/?cmd=next')
-
-        # Detect a skip on Volumio
-        # and where the cast elapsed time > 0 (means it played at least 1 second)
-        # and the difference between elapsed times >= 10 seconds
+        # Detect a skip on Volumio and issue a seek request on the 
+        # chromecast.
+        # This feature can mis-fire depending on when its checked and 
+        # what detail is present on the Volumio status.
+        # So we check that the chromecast is actively playing (cast_elapsed > 0)
+        # Also check that there is a min of 3 seconds between the time the track was 
+        # cast and curent timestamp. This prevents issues where the MPD status 
+        # shows a new track but retains the old track elapsed time for 1-2 seconds
+        # Finally we ensure there is at least 5 seconds difference between the 
+        # two elapsed times to ensure it's not a false positive because of lag
         if (status == 'play' and 
                 cast_status == 'play' and 
                 not cast_uri.startswith('http') and 
                 cast_elapsed > 0 and 
-                abs(volumio_seek - cast_elapsed) >= 10):
+                now - cast_timestamp > 3 and 
+                abs(volumio_seek - cast_elapsed) >= 5):
             log_message(
                     "Sync Volumio elapsed %d secs to Chromecast" % (
                         volumio_seek))
@@ -426,6 +430,9 @@ def volumio_agent():
     
         # Sync Chromecast playback back to Volumio
         # Every 10 seconds
+        # ignore web radio streams
+        # This usually syncs Volumio to 1 second behding the 
+        # chromecast.. which is OK
         if (status == 'play' and 
                 not cast_uri.startswith('http') and
                 cast_elapsed > 0 and 
