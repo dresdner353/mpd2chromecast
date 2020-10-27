@@ -121,8 +121,8 @@ def chromecast_agent():
 
         f.close()
 
-        # only repeat once every 30 seconds
-        time.sleep(30)
+        # only repeat once every 60 seconds
+        time.sleep(60)
 
     return 
 
@@ -225,6 +225,7 @@ def volumio_agent():
         last_volumio_seek = volumio_seek
         uri = json_resp['uri']
         volumio_volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
+        volumio_mute = json_resp['mute']
 
         # optional fields depending on what 
         # is playing such as streams vs music files
@@ -250,13 +251,14 @@ def volumio_agent():
         else:
             progress = 0
 
-        log_message("Current Track %s/%s/%s" % (
+        log_message("Current Track:%s/%s/%s" % (
             artist,
             album,
             title))
 
-        log_message("Volumio Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
+        log_message("Volumio (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
             status,
+            int(volumio_volume * 100) if not volumio_mute else 'muted',
             elapsed_mins,
             elapsed_secs,
             duration_mins,
@@ -315,9 +317,10 @@ def volumio_agent():
             elapsed_secs = cast_elapsed % 60
             duration_mins = int(cast_duration / 60)
             duration_secs = cast_duration % 60
-            log_message("Chromecast Name:%s Status:%s Elapsed: %d:%02d/%d:%02d [%02d%%]" % (
+            log_message("%s (%s) vol:%02d %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
                 status,
+                int(cast_volume * 100),
                 elapsed_mins,
                 elapsed_secs,
                 duration_mins,
@@ -374,13 +377,23 @@ def volumio_agent():
             continue
 
         # Volume change only while playing
-        if (cast_volume != volumio_volume and
-                cast_status == 'play'):
+        if (cast_status == 'play' and 
+                not volumio_mute and
+                cast_volume != volumio_volume):
 
             log_message("Setting Chromecast Volume: %.2f" % (volumio_volume))
             cast_device.set_volume(volumio_volume)
             cast_volume = volumio_volume
-    
+
+        # Mute during playback
+        if (cast_status == 'play' and 
+                volumio_mute and
+                cast_volume != 0):
+
+            cast_volume = 0  
+            log_message("Setting Chromecast Volume: %.2f (mute)" % (cast_volume))
+            cast_device.set_volume(cast_volume)
+
         # Pause
         if (cast_status != 'pause' and
             status == 'pause'):
