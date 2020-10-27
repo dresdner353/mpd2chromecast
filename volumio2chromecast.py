@@ -248,9 +248,9 @@ def volumio_agent():
 
         # optional fields depending on what 
         # is playing such as streams vs music files
-        artist = 'None'
-        album = 'None'
-        title = 'None'
+        artist = ''
+        album = ''
+        title = ''
         duration = 0
         if 'artist' in json_resp:
             artist = json_resp['artist']
