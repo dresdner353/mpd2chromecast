@@ -373,7 +373,6 @@ def volumio_agent():
             cast_name = gv_chromecast_name
 
             if not cast_device:
-                log_message("Failed to get cast device object")
                 continue
 
             # Kill off any current app
