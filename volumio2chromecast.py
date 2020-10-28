@@ -134,10 +134,14 @@ class stream_handler(object):
 def web_server():
 
     # engine config
-    cherrypy.config.update({'environment': 'production',
-                            'log.screen': False,
-                            'log.access_file': '',
-                            'log.error_file': ''})
+    cherrypy.config.update(
+            {
+                'environment': 'production',
+                'log.screen': False,
+                'log.access_file': '',
+                'log.error_file': ''
+            }
+            )
 
     # Listen on our port on any IF
     cherrypy.server.socket_host = '0.0.0.0'
@@ -170,6 +174,14 @@ def volumio_uri_to_url(
         cast_url = uri
         type = "audio/mp3"
     else:
+        # remove leading 'music-library' or 'mnt' if present
+        # we're hosting from /mnt so we need remove the top-level
+        # dir
+        for prefix in ['music-library/', 'mnt/']:
+            prefix_len = len(prefix)
+            if uri.startswith(prefix):
+                uri = uri[prefix_len:]
+
         # Format file URL as path from our web server
         cast_url = "http://%s:8000/music/%s" % (
                 server_ip,
@@ -218,7 +230,6 @@ def volumio_agent():
     cast_uri = 'none'
     cast_volume = 0
 
-    last_volumio_seek = 0
     volumio_seek = 0
     cast_timestamp = 0
     
@@ -240,7 +251,6 @@ def volumio_agent():
 
         status = json_resp['status']
         volumio_seek = int(json_resp['seek'] / 1000)
-        last_volumio_seek = volumio_seek
         uri = json_resp['uri']
         albumart = json_resp['albumart']
         volumio_volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
@@ -261,6 +271,7 @@ def volumio_agent():
         if 'duration' in json_resp:
             duration = json_resp['duration']
 
+        # Elapsed time and progress
         elapsed_mins = int(volumio_seek / 60)
         elapsed_secs = volumio_seek % 60
         duration_mins = int(duration / 60)
@@ -283,14 +294,6 @@ def volumio_agent():
             duration_mins,
             duration_secs,
             progress))
-
-        # remove leading 'music-library' or 'mnt' if present
-        # we're hosting from /mnt so we need remove the top-level
-        # dir
-        for prefix in ['music-library/', 'mnt/']:
-            prefix_len = len(prefix)
-            if uri.startswith(prefix):
-                uri = uri[prefix_len:]
 
         # Chromecast URLs for media and artwork
         cast_url, type = volumio_uri_to_url(gv_server_ip, uri)
@@ -349,7 +352,7 @@ def volumio_agent():
 
         # Configured Chromecast change
         # Clear existing device handle
-        if cast_name != gv_chromecast_name:
+        if (cast_name != gv_chromecast_name):
             # Stop media player of existing device
             # if it exists
             if (cast_device):
@@ -403,6 +406,7 @@ def volumio_agent():
             log_message("Setting Chromecast Volume: %.2f" % (volumio_volume))
             cast_device.set_volume(volumio_volume)
             cast_volume = volumio_volume
+            continue
 
         # Mute during playback
         if (cast_status == 'play' and 
@@ -412,6 +416,7 @@ def volumio_agent():
             cast_volume = 0  
             log_message("Setting Chromecast Volume: %.2f (mute)" % (cast_volume))
             cast_device.set_volume(cast_volume)
+            continue
 
         # Pause
         if (cast_status != 'pause' and
@@ -420,6 +425,7 @@ def volumio_agent():
             log_message("Pausing Chromecast")
             cast_device.media_controller.pause()
             cast_status = status
+            continue
         
         # Resume play
         if (cast_status == 'pause' and 
@@ -428,6 +434,7 @@ def volumio_agent():
             log_message("Unpause Chromecast")
             cast_device.media_controller.play()
             cast_status = status
+            continue
         
         # Stop
         if (cast_status != 'stop' and 
@@ -460,6 +467,10 @@ def volumio_agent():
                     #current_time = volumio_seek,
                     autoplay = True)
 
+            # Seek playback on Volumio to start of track
+            resp = api_session.get(
+                    'http://localhost:3000/api/v1/commands/?cmd=seek&position=0')
+
             # Note the various specifics of play 
             cast_status = status
             cast_uri = uri
@@ -489,21 +500,28 @@ def volumio_agent():
             cast_device.media_controller.seek(volumio_seek)
             continue 
     
-        # Sync Chromecast playback back to Volumio
-        # Every 10 seconds
-        # ignore web radio streams
-        # This usually syncs Volumio to 1 second behding the 
-        # chromecast.. which is OK
+        # Every 10 seconds sync Chromecast playback 
+        # back to Volumio elapsed time if volumio
+        # is at the same time or further on.
+        # Radio streams ignored for this.
+        # The value we then set on volumio is 1 second 
+        # behind the # chromecast elapsed time.
+        # We want volumio preferentially 1 second behind the 
+        # Chromecast to allow the chromecast complete the stream 
+        # before it reacts to a track change
         if (status == 'play' and 
                 not cast_uri.startswith('http') and
                 cast_elapsed > 0 and 
-                cast_elapsed % 10 == 0):
+                cast_elapsed % 10 == 0 and
+                volumio_seek >= cast_elapsed):
                 log_message(
                         "Sync Chromecast elapsed %d secs to Volumio" % (
                             cast_elapsed))
+
+                # Value for seek is 1 second less
                 resp = api_session.get(
                         'http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (
-                            cast_elapsed))
+                            cast_elapsed - 1))
 
 
 
