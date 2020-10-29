@@ -27,7 +27,8 @@ gv_chromecast_name = ""
 def get_chromecast():
     global gv_chromecast_name
 
-    if not gv_chromecast_name:
+    if (not gv_chromecast_name or 
+            gv_chromecast_name == 'off'):
         return None
 
     log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
