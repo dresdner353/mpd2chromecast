@@ -28,16 +28,23 @@ if (cast_name == ""):
     devices, browser = pychromecast.get_chromecasts()
     total_devices = len(devices)
     print("Found %d devices" % (total_devices))
-    if (total_devices > 0):
-        index = 0
-        for cc in devices:
-            print("%2d   %s" % (index, cc.device.friendly_name))
-            index += 1
+
+    # First item in list is keyword 'off'
+    total_devices += 1 
+    device_list = ['off']
+    for cc in devices:
+        device_list.append(cc.device.friendly_name)
+
+    index = 0
+    for device in device_list:
+        print("%2d   %s" % (index, device))
+        index += 1
+
     index = int(input("Enter device number: "))
     if (index < 0 or index >= total_devices):
         print("Invalid selection.. should be in range 0..%d" % (total_devices - 1))
     else:
-        cast_name = devices[index].device.friendly_name
+        cast_name = device_list[index]
 
 if cast_name != "":
     print("Setting desired Chromecast to [%s]" % (cast_name))
