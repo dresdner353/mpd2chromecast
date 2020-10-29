@@ -44,12 +44,11 @@ def get_chromecast():
     return None
 
 
-def load_config():
-    global gv_cfg_filename
+def load_config(cfg_filename):
     global gv_chromecast_name
 
-    log_message("Loading config from %s" % (gv_cfg_filename))
-    cfg_file = open(gv_cfg_filename, 'r')
+    log_message("Loading config from %s" % (cfg_filename))
+    cfg_file = open(cfg_filename, 'r')
     json_str = cfg_file.read()
     json_cfg = json.loads(json_str)
     cfg_file.close()
@@ -60,25 +59,12 @@ def load_config():
     return
 
 
-def config_init(name):
-    global gv_chromecast_name
-    global gv_cfg_filename
-
-    gv_chromecast_name = name
-
-    if (gv_chromecast_name == ""):
-        # Determine home directory and cfg file
-        # given no cmdline args used
-        home = os.path.expanduser("~")
-        gv_cfg_filename = home + '/.castrc'
-        load_config()
-
-    return
-
-
 def config_agent():
     # monitor the config file and react on changes
     global gv_cfg_filename
+
+    home = os.path.expanduser("~")
+    gv_cfg_filename = home + '/.castrc'
 
     last_check = 0
 
@@ -88,7 +74,7 @@ def config_agent():
             config_last_modified = os.path.getmtime(gv_cfg_filename)
             if config_last_modified > last_check:
                 log_message("Detected update to %s" % (gv_cfg_filename))
-                load_config()
+                load_config(gv_cfg_filename)
                 last_check = config_last_modified
 
         time.sleep(5)
@@ -249,7 +235,7 @@ def volumio_agent():
             log_message('Problem getting volumio status')
             continue
 
-        status = json_resp['status']
+        volumio_status = json_resp['status']
         volumio_seek = int(json_resp['seek'] / 1000)
         uri = json_resp['uri']
         albumart = json_resp['albumart']
@@ -287,7 +273,7 @@ def volumio_agent():
             title))
 
         log_message("Volumio (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
-            status,
+            volumio_status,
             int(volumio_volume * 100) if not volumio_mute else 'muted',
             elapsed_mins,
             elapsed_secs,
@@ -341,7 +327,7 @@ def volumio_agent():
             duration_secs = cast_duration % 60
             log_message("%s (%s) vol:%02d %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
-                status,
+                cast_status,
                 int(cast_volume * 100),
                 elapsed_mins,
                 elapsed_secs,
@@ -361,13 +347,13 @@ def volumio_agent():
                     gv_chromecast_name))
                 cast_device.media_controller.stop()
                 cast_device.quit_app()
-                cast_status = status
+                cast_status = volumio_status
                 cast_device = None
                 continue
 
         # Get cast device when in play state and 
         # no device curently present
-        if (status == 'play' and 
+        if (volumio_status == 'play' and 
                 not cast_device):
             cast_device = get_chromecast()
             cast_name = gv_chromecast_name
@@ -419,36 +405,36 @@ def volumio_agent():
 
         # Pause
         if (cast_status != 'pause' and
-            status == 'pause'):
+            volumio_status == 'pause'):
 
             log_message("Pausing Chromecast")
             cast_device.media_controller.pause()
-            cast_status = status
+            cast_status = volumio_status
             continue
         
         # Resume play
         if (cast_status == 'pause' and 
-            status == 'play'):
+            volumio_status == 'play'):
 
             log_message("Unpause Chromecast")
             cast_device.media_controller.play()
-            cast_status = status
+            cast_status = volumio_status
             continue
         
         # Stop
         if (cast_status != 'stop' and 
-            status == 'stop'):
+            volumio_status == 'stop'):
 
             log_message("Stop Chromecast")
             cast_device.media_controller.stop()
-            cast_status = status
+            cast_status = volumio_status
             cast_device = None
             continue
 
         # Play a song or stream or next in playlist
         if ((cast_status != 'play' and
-            status == 'play') or
-            (status == 'play' and uri != cast_uri)):
+            volumio_status == 'play') or
+            (volumio_status == 'play' and uri != cast_uri)):
 
             log_message("Casting URL:%s type:%s" % (
                 cast_url.encode('utf-8'),
@@ -471,7 +457,7 @@ def volumio_agent():
                     'http://localhost:3000/api/v1/commands/?cmd=seek&position=0')
 
             # Note the various specifics of play 
-            cast_status = status
+            cast_status = volumio_status
             cast_uri = uri
             cast_timestamp = now
             continue
@@ -487,7 +473,7 @@ def volumio_agent():
         # shows a new track but retains the old track elapsed time for 1-2 seconds
         # Finally we ensure there is at least 5 seconds difference between the 
         # two elapsed times to ensure it's not a false positive because of lag
-        if (status == 'play' and 
+        if (volumio_status == 'play' and 
                 cast_status == 'play' and 
                 not cast_uri.startswith('http') and 
                 cast_elapsed > 0 and 
@@ -508,7 +494,7 @@ def volumio_agent():
         # We want volumio preferentially 1 second behind the 
         # Chromecast to allow the chromecast complete the stream 
         # before it reacts to a track change
-        if (status == 'play' and 
+        if (volumio_status == 'play' and 
                 not cast_uri.startswith('http') and
                 cast_elapsed > 0 and 
                 cast_elapsed % 10 == 0 and
@@ -529,22 +515,13 @@ def volumio_agent():
 parser = argparse.ArgumentParser(
         description='Volumio Chromecast Agent')
 
-parser.add_argument('--name', 
-                    help = 'Chromecast Friendly Name', 
-                    default = "",
-                    required = False)
-
 parser.add_argument('--verbose', 
                     help = 'Enable verbose output', 
                     action = 'store_true')
 
 
 args = vars(parser.parse_args())
-gv_chromecast_name = args['name']
 gv_verbose = args['verbose']
-
-# Init config
-config_init(gv_chromecast_name)
 
 # Determine the main IP address of the server
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
