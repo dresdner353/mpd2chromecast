@@ -118,10 +118,10 @@ The script runs four threads:
 This is to monitor the playback state of the server allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to configured chromecast. It also monitors the chromecast status to ensure playback is operational. 
 
 * Cherrypy (web server)  
-This thread provides a simple web server whoich is used to serve a URL for each track. The chromecasts will use that URL to stream the files for playback
+This thread provides a simple web server which is used to serve a URL for each track. The chromecasts will use that URL to stream the files for native playback.
 
 * Config  
-This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device
+This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
 
 * Chromecast (experimental scanner)  
 This thread is experimental. It runs on loop every minute, scanning for available chromecasts and stores the names (in ~/.castdevices). The intention here is to get a Volumio plugin to leverage that detail for a GUI selection of the desired chromecast. It's also possible to evolve the set_chromecast.py script to use this file for a faster execution instead of having to wait for a scan each time.
