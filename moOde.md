@@ -85,7 +85,7 @@ When using the saved config approach, the script watches the ~/.castrc file for 
 All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10-20 seconds, giving time for the change to be detected and discovery of the new device to take place.
 
 ## Disabling
-To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by disabling the crontab entry. 
+To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by deleting/commenting out the crontab entry. 
 
 However there is an easier way to do this by setting the configured chromecast device to 'off'. 
 ```
