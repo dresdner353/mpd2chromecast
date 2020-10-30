@@ -103,7 +103,7 @@ When using the saved config approach, the script watches the ~/.castrc file for 
 All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10-20 seconds, giving time for the change to be detected and discovery of the new device to take place.
 
 ## Disabling
-To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by disabling the crontab entry. 
+To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by deleting/commenting out the crontab entry. 
 
 However there is an easier way to do this by setting the configured chromecast device to 'off'. 
 ```
@@ -113,15 +113,24 @@ Setting desired Chromecast to [off]
 This will cause the script to disconnect from any existing cast device and disable any further attempts to connect to a chromecast until the configured device name is again changed.
 
 ## How it works
-The script runs three threads, one each for config, volumio and a web server.
+The script runs four threads:
+* Volumio  
+This is to monitor the playback state of the server allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to configured chromecast. It also monitors the chromecast status to ensure playback is operational. 
 
-The config thread is there to do one thing and that is detect changes in ~/.castrc and update the internal name of the target Chromecast.
+* Cherrypy (web server)  
+This thread provides a simple web server whoich is used to serve a URL for each track. The chromecasts will use that URL to stream the files for playback
 
-The web server thread is there to serve up music files stored locally as URLs to the target Chromecasts.
+* Config  
+This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device
 
-The Volumio thread runs in a permanent loop, checking the Volumio playback state every second and from there, auto casts the playing file URL to the target Chromecast. It responds to play/stop, track and volume changes in real-time. So as you use the Volumio interface to select the desired music, stop/pause/etc it will immediately match the same action via the target Chromecast or cast group. 
+* Chromecast (experimental scanner)  
+This thread is experimental. It runs on loop every minute, scanning for available chromecasts and stores the names (in ~/.castdevices). The intention here is to get a Volumio plugin to leverage that detail for a GUI selection of the desired chromecast. It's also possible to evolve the set_chromecast.py script to use this file for a faster execution instead of having to wait for a scan each time.
 
-Seek will also work if you use Volumio to skip forward or backward within the playing track, the script will force the Chromecast to seek the same point in the stream. Also during playback every 10 seconds, the Chromecast current elapsed time position is synced back to Volumio. This is to ensure that Volumio is playing back slightly behind the Chromecast. So if you are listening via local Audio output, expect to hear skips every 10 seconds as the playback syncs up. But that should not be an issue as the entire point of this integration is to use the Chromecast(s) as the playback devices.
+
+### The Volumio <-> Chromecast Thread in more detail
+The Volumio thread checks the Volumio playback state every second and from there, auto casts the playing file URL to the target Chromecast. It responds to play/stop, track and volume changes in real-time. So as you use the Volumio interface to select the desired music, stop/pause/etc it will immediately match the same action via the target Chromecast or cast group. The same thread will use the pychromecast module to obtain a handle object for the configured chromecast. This provides us with the means of monitoring chromecast playback status and also a way to tell it to stop/start and stream a given file. 
+
+Seek will also work if you use Volumio to skip forward or backward within the playing track. The script will force the Chromecast to seek to the same point in the stream. Also during playback every 10 seconds, the Chromecast current elapsed time position is synced back to Volumio if Volumio is at the same elapsed time or even ahead. This is to ensure that Volumio is playing back 1-2 seconds behind the Chromecast. So if you are listening via local Audio output, expect to hear skips every so often as the playback syncs up. But that should not be an issue as the entire point of this integration is to use the Chromecast(s) as the playback devices.
 
 ## File types that work
 Volumio will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer. We're serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
