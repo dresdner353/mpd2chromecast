@@ -86,10 +86,9 @@ def config_agent():
 def chromecast_agent():
     last_check = 0
 
-    home = os.path.expanduser("~")
-    discovered_devices_file = home + '/.castdevices'
+    discovered_devices_file = '/tmp/castdevices'
 
-    # 5-second check for config changes
+    # 1-minute interval for chromecast scan
     while (1):
         devices, browser = pychromecast.get_chromecasts()
         total_devices = len(devices)
