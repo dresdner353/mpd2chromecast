@@ -2,6 +2,8 @@
 
 This is a python script you can deploy on a Volumio installation and use it to control playback via a Google Chromecast device and all variants such as Google/Nest Home speakers.
 
+Note: For installation on moOde, [see moOde README](./moOde.md)  
+
 The script uses the Volumio API to monitor playback state of the app and then passes a URL for the file to the target Chromecast where it will stream the file directly. It uses pychromecast (https://github.com/balloob/pychromecast) for the Chromecast integration. 
 
 As you invoke play, stop, pause, next and previous actions on Volumio's Web IF, these are detected by the script and relayed to the Chromecast to match. 
