@@ -472,14 +472,14 @@ def volumio_agent():
         # Also check that there is a min of 3 seconds between the time the track was 
         # cast and curent timestamp. This prevents issues where the MPD status 
         # shows a new track but retains the old track elapsed time for 1-2 seconds
-        # Finally we ensure there is at least 5 seconds difference between the 
+        # Finally we ensure there is at least 10 seconds difference between the 
         # two elapsed times to ensure it's not a false positive because of lag
         if (volumio_status == 'play' and 
                 cast_status == 'play' and 
                 not cast_uri.startswith('http') and 
                 cast_elapsed > 0 and 
                 now - cast_timestamp > 3 and 
-                abs(volumio_seek - cast_elapsed) >= 5):
+                abs(volumio_seek - cast_elapsed) >= 10):
             log_message(
                     "Sync Volumio elapsed %d secs to Chromecast" % (
                         volumio_seek))
