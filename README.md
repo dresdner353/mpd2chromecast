@@ -41,7 +41,7 @@ You should first run the set_chromecast.py script to perform a scan of the avail
 
 For example:
 ```
-volumio@volumio:~$ ./volumio2chromecast/set_chromecast.py
+$ ./volumio2chromecast/set_chromecast.py
 Discovering Chromecasts.. (this may take a while)
 Found 9 devices
  0   Girls Google Home
@@ -55,15 +55,13 @@ Found 9 devices
  8   Office Google Home
 Enter device number: 7
 Setting desired Chromecast to [Office]
-volumio@volumio:~$ 
 ```
 This then saves the selected Chromecast name in ~/.castrc. 
 
 You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
 ```
-volumio@volumio:~$ ./volumio2chromecast/set_chromecast.py --name 'Office'
+$ ./volumio2chromecast/set_chromecast.py --name 'Office'
 Setting desired Chromecast to [Office]
-volumio@volumio:~$ 
 ```
 
 ## Test Run
@@ -104,8 +102,15 @@ When using the saved config approach, the script watches the ~/.castrc file for 
 
 All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10-20 seconds, giving time for the change to be detected and discovery of the new device to take place.
 
-**Note**: To stop casting, you can either pause playback or clear the playlist. You can also however run set_chromecast.py and select 'off' from the menu or run it as set_chromecast.py --name off to get the same effect. This will save the word 'off' in the ~/.castrc as if it were the selected Chromecast device. However the script recognises this as a key word and stops attempting to connect to the configured chromecast.
+## Disabling
+To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by disabling the crontab entry. 
 
+However there is an easier way to do this by setting the configured chromecast device to 'off'. 
+```
+$ ./volumio2chromecast/set_chromecast.py --name 'off'
+Setting desired Chromecast to [off]
+```
+This will cause the script to disconnect from any existing cast device and disable any further attempts to connect to a chromecast until the configured device name is again changed.
 
 ## How it works
 The script runs three threads, one each for config, volumio and a web server.
