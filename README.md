@@ -123,8 +123,8 @@ This thread provides a simple web server which is used to serve a URL for each t
 * Config  
 This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
 
-* Chromecast (experimental scanner)  
-This thread is experimental. It runs on loop every minute, scanning for available chromecasts and stores the names (in ~/.castdevices). The intention here is to get a Volumio plugin to leverage that detail for a GUI selection of the desired chromecast. It's also possible to evolve the set_chromecast.py script to use this file for a faster execution instead of having to wait for a scan each time.
+* Chromecast Discovery  
+This thread is experimental. It runs on loop every minute, scanning for available chromecasts and stores the names (in /tmp/castdevices). The intention here is to get a Volumio plugin to leverage that detail for something like a GUI selection of the desired chromecast. It's also possible to evolve the set_chromecast.py script to use this file for a faster execution instead of having to wait for a scan each time.
 
 
 ### The Volumio <-> Chromecast Thread in more detail
