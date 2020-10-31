@@ -475,7 +475,6 @@ def volumio_agent():
                     content_type = type,
                     title = title,
                     thumb = albumart_url,
-                    #current_time = volumio_seek,
                     autoplay = True)
 
             # Pause and seek to start of track
