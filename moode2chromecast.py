@@ -381,6 +381,26 @@ def moode_agent():
         if (not cast_device):
             continue
 
+        # Initial Cast protection
+        # In first 10 seconds after casting a file
+        # we keep moOde paused only unpausing 
+        # and re-seeking to cast_elapsed - 1 when the 
+        # chromecast is reporting elapsed time
+        if (now - cast_timestamp < 10 and 
+                moode_status == 'pause' and 
+                cast_status == 'play' and
+                not cast_uri.startswith('http')):
+            if (cast_elapsed < 1):
+                log_message('Initial cast.. Waiting for chromecast elapsed time')
+            else:
+                log_message('Initial cast.. Unpausing moode')
+                # sync 1 second behind
+                os.system('mpc seek %d >/dev/null 2>&1' % (cast_elapsed - 1))
+                # play
+                os.system('mpc play >/dev/null 2>&1')
+            continue
+
+
         # Volume change only while playing
         if (cast_status == 'play' and 
                 cast_volume != moode_volume):
@@ -436,14 +456,10 @@ def moode_agent():
                     content_type = type,
                     title = title,
                     thumb = albumart_url,
-                    #current_time = moode_elapsed,
                     autoplay = True)
 
-            # Seek playback on moOde to start of track
-            # Had no success using the REST API for this
-            # so I had to stoop to running mpc directly
-            # Get the feeling however is that the moode API also
-            # calls mpc
+            # Pause and seek to start of track
+            os.system('mpc pause >/dev/null 2>&1')
             os.system('mpc seek 0 >/dev/null 2>&1')
 
             # Note the various specifics of play 
