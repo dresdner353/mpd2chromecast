@@ -236,7 +236,10 @@ def volumio_agent():
             continue
 
         volumio_status = json_resp['status']
-        volumio_seek = int(json_resp['seek'] / 1000)
+        if json_resp['seek']:
+            volumio_seek = int(json_resp['seek'] / 1000)
+        else:
+            volumio_seek = 0
         uri = json_resp['uri']
         albumart = json_resp['albumart']
         volumio_volume = int(json_resp['volume']) / 100 # scale to 0.0 to 1.0 for Chromecast
@@ -383,6 +386,29 @@ def volumio_agent():
         if (not cast_device):
             continue
 
+        # Initial Cast protection
+        # In first 10 seconds after casting a file
+        # we keep Volumio paused only unpausing 
+        # and re-seeking to cast_elapsed - 1 when the 
+        # chromecast is reporting elapsed time
+        if (now - cast_timestamp < 10 and 
+                volumio_status == 'pause' and 
+                cast_status == 'play' and
+                not cast_uri.startswith('http')):
+            if (cast_elapsed < 1):
+                log_message('Initial cast.. Waiting for chromecast elapsed time')
+            else:
+                log_message('Initial cast.. Unpausing volumio')
+                # sync 1 second behind
+                resp = api_session.get(
+                        'http://localhost:3000/api/v1/commands/?cmd=seek&position=%d' % (
+                            cast_elapsed - 1))
+                # play
+                resp = api_session.get(
+                        'http://localhost:3000/api/v1/commands/?cmd=play')
+            continue
+
+
         # Volume change only while playing
         if (cast_status == 'play' and 
                 not volumio_mute and
@@ -452,7 +478,10 @@ def volumio_agent():
                     #current_time = volumio_seek,
                     autoplay = True)
 
-            # Seek playback on Volumio to start of track
+            # Pause and seek to start of track
+            log_message("Pausing Volumio and seeking to 0 (initial cast)")
+            resp = api_session.get(
+                    'http://localhost:3000/api/v1/commands/?cmd=pause')
             resp = api_session.get(
                     'http://localhost:3000/api/v1/commands/?cmd=seek&position=0')
 
@@ -485,15 +514,11 @@ def volumio_agent():
             cast_device.media_controller.seek(volumio_seek)
             continue 
     
-        # Every 10 seconds sync Chromecast playback 
-        # back to Volumio elapsed time if volumio
-        # is at the same time or further on.
-        # Radio streams ignored for this.
-        # The value we then set on volumio is 1 second 
-        # behind the # chromecast elapsed time.
-        # We want volumio preferentially 1 second behind the 
-        # Chromecast to allow the chromecast complete the stream 
-        # before it reacts to a track change
+        # Every 10 seconds 
+        # Check for volumio_seek >= cast_elapsed
+        # and seek it back to cast_elapsed - 1 if necessary.
+        # This protects against a change of track by volumio 
+        # before the casting has finished
         if (volumio_status == 'play' and 
                 not cast_uri.startswith('http') and
                 cast_elapsed > 0 and 
