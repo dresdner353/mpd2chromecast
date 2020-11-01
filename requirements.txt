@@ -1,2 +1,4 @@
+python-mpd2
 pychromecast
+mutagen
 cherrypy
