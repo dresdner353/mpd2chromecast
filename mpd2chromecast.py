@@ -3,16 +3,16 @@
 
 import pychromecast
 import mpd
+import mutagen
 import threading
 import argparse
 import time
 import os
 import sys
 import cherrypy
-#import urllib
 import json
 import socket
-#import traceback
+
 
 def log_message(message):
     print("%s %s" % (
@@ -141,6 +141,11 @@ def web_server():
            'tools.staticdir.on': True,
            'tools.staticdir.dir': '/mnt',
            'tools.staticdir.index': 'index.html',
+       },
+       '/tmp': {
+           'tools.staticdir.on': True,
+           'tools.staticdir.dir': '/tmp',
+           'tools.staticdir.index': 'index.html',
        }
     }
 
@@ -174,20 +179,73 @@ def mpd_file_to_url(
     return (cast_url, type)
 
 
-def mpd_albumart_to_url(
+def mpd_file_to_artwork_url(
         server_ip,
-        albumart):
+        mpd_file):
 
-    if albumart.startswith('http'):
-        artwork_url = albumart
+
+    artwork_mime = None
+    artwork_data = None
+    artwork_url = None
+
+    # Analyse file with mutagen and try to extract artwork
+    mrec = mutagen.File('/mnt/' + mpd_file)
+
+    if type(mrec) == mutagen.flac.FLAC:
+        if (len(mrec.pictures) > 0):
+            artwork_mime = mrec.pictures[0].mime
+            artwork_data = mrec.pictures[0].data
+
+    elif type(mrec) == mutagen.mp3.MP3:
+        for tag in mrec.tags.keys():
+            if tag.startswith('APIC'):
+                artwork_mime = mrec.tags[tag].mime
+                artwork_data = mrec.tags[tag].data
+                break
+
+    elif type(mrec) == mutagen.mp4.MP4:
+        if 'covr' in mrec.tags:
+            artwork_data = mrec.tags['covr'][0]
+            if mrec.tags['covr'][0].imageformat == 13:
+                artwork_mime = 'image/jpg'
+            else:
+                artwork_mime = 'image/png'
+
+    if artwork_data:
+        # Write detected embedded artwork to a file in /tmp
+        # for serving via URL
+        artwork_ext = artwork_mime.replace('image/', '')
+        artwork_filename = 'artwork.%s' % (artwork_ext)
+        aw_file = open('/tmp/' + artwork_filename, 'wb')
+        aw_file.write(artwork_data)
+        aw_file.close()
+
+        artwork_url = 'http://%s:8000/tmp/%s' % (
+                gv_server_ip,
+                artwork_filename)
+        log_message('Artwork URL: %s' % (
+            artwork_url))
     else:
-        # Format file URL as path to mpd
-        # webserver plus the freaky albumart URI
-        artwork_url = "http://%s%s" % (
-                server_ip,
-                albumart)
+        # Fallback, last-ditch is to check container 
+        # directory for the first image file we find
+        # It will be served from the music URL, same one 
+        # used to stream the files for playback
+        log_message("Checking directory for artwork")
+        artwork_file_exts = ['jpg', 'png', 'jpeg', 'gif', 'bmp']
+        search_dir = os.path.dirname('/mnt/' + mpd_file)
+        for file in os.listdir(search_dir):
+            for artwork_ext in artwork_file_exts:
+                if file.lower().endswith(artwork_ext):
+                    artwork_url = 'http://%s:8000/music/%s' % (
+                            gv_server_ip,
+                            os.path.join(search_dir, file))
+                    log_message('Artwork URL: %s' % (
+                        artwork_url))
+                    break
+
 
     return artwork_url
+
 
 
 def mpd_agent():
@@ -258,7 +316,6 @@ def mpd_agent():
         if 'duration' in mpd_client_status:
             mpd_duration = int(float(mpd_client_status['duration']))
 
-        albumart = 'unknown' # FIXME seems mpd wont have this
 
         artist = ''
         album = ''
@@ -295,8 +352,7 @@ def mpd_agent():
             progress))
 
         # Chromecast URLs for media and artwork
-        cast_url, type = mpd_file_to_url(gv_server_ip, mpd_file)
-        albumart_url = mpd_albumart_to_url(gv_server_ip, albumart)
+        cast_url, cast_file_type = mpd_file_to_url(gv_server_ip, mpd_file)
 
         # Chromecast Status
         if (cast_device):
@@ -461,7 +517,18 @@ def mpd_agent():
 
             log_message("Casting URL:%s type:%s" % (
                 cast_url.encode('utf-8'),
-                type))
+                cast_file_type))
+
+            args = {}
+            args['content_type'] = cast_file_type
+            args['title'] = title
+            args['autoplay'] = True
+
+            artwork_url = mpd_file_to_artwork_url(
+                    gv_server_ip,
+                    mpd_file)
+            if artwork_url:
+                args['thumb'] = artwork_url
 
             # Let the magic happen
             # Wait for the connection and then issue the 
@@ -469,10 +536,7 @@ def mpd_agent():
             cast_device.wait()
             cast_device.media_controller.play_media(
                     cast_url, 
-                    content_type = type,
-                    title = title,
-                    #thumb = albumart_url,
-                    autoplay = True)
+                    **args)
 
             # Note the various specifics of play 
             cast_status = mpd_status
@@ -523,7 +587,8 @@ def mpd_agent():
                 not cast_file.startswith('http') and
                 cast_elapsed > 0 and 
                 cast_elapsed % 10 == 0 and
-                mpd_elapsed >= cast_elapsed):
+                (mpd_elapsed >= cast_elapsed or
+                    mpd_elapsed < cast_elapsed - 1)):
                 log_message(
                         "Sync Chromecast elapsed %d secs to MPD" % (
                             cast_elapsed))
