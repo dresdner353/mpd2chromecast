@@ -119,6 +119,7 @@ def chromecast_agent():
 
         index = 0
         f = open(discovered_devices_file, "w")
+        f.write("off\n") # default "off" device
         for cc in devices:
             index += 1
             log_message("%d/%d %s" % (
