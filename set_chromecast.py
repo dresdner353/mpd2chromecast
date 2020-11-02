@@ -16,25 +16,53 @@ parser.add_argument('--name',
                     default = "",
                     required = False)
 
+parser.add_argument('--discover', 
+                    help = 'Force Discovery of Chromecasts', 
+                    action = 'store_true')
+
 args = vars(parser.parse_args())
 cast_name = args['name']
+discover_mode = args['discover']
 
 # Determine home directory
 home = os.path.expanduser("~")
 
+discovered_devices_file = '/tmp/castdevices'
+
 # Scan if no device specified
 if (cast_name == ""):
-    print("Discovering Chromecasts.. (this may take a while)")
-    devices, browser = pychromecast.get_chromecasts()
-    total_devices = len(devices)
-    print("Found %d devices" % (total_devices))
+    # Initial value always off
+    # special keyword
 
-    # First item in list is keyword 'off'
-    total_devices += 1 
-    device_list = ['off']
-    for cc in devices:
-        device_list.append(cc.device.friendly_name)
+    if (discover_mode or 
+            not os.path.exists(discovered_devices_file)):
+        # Use pychromecast to discover
+        print("Discovering Chromecasts.. (this may take a while)")
+        devices, browser = pychromecast.get_chromecasts()
+        print("Found %d devices" % (len(devices)))
 
+        # Default "off" device
+        device_list = ['off']
+        for cc in devices:
+            device_list.append(cc.device.friendly_name)
+
+        # Store discovered 
+        f = open(discovered_devices_file, "w")
+        for device in device_list:
+            f.write("%s\n" % (device))
+        f.close()
+
+    else:
+        # Use existing cached list of discovered devices
+        # updated every minute by the main script
+        device_list = []
+        with open(discovered_devices_file) as f:
+            devices = f.read().splitlines()
+            for device in devices:
+                device_list.append(device)
+
+    # Display and select
+    total_devices = len(device_list)
     index = 0
     for device in device_list:
         print("%2d   %s" % (index, device))
