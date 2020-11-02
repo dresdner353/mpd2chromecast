@@ -565,6 +565,7 @@ def mpd_agent():
                 cast_status == 'play' and 
                 not cast_file.startswith('http') and 
                 cast_confirmed and
+                cast_elapsed > 0 and
                 abs(mpd_elapsed - cast_elapsed) >= 10):
             log_message(
                     "Sync MPD elapsed %d secs to Chromecast" % (
