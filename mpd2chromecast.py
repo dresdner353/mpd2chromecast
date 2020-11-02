@@ -223,9 +223,12 @@ def get_artwork_url():
                 log_message(json.dumps(json_resp, indent = 4))
 
             albumart = json_resp['coverurl']
-            artwork_url = "http://%s%s" % (
-                    gv_server_ip,
-                    albumart)
+            if albumart.startswith('http'):
+                artwork_url = albumart
+            else:
+                artwork_url = "http://%s%s" % (
+                        gv_server_ip,
+                        albumart)
         except:
             log_message('Problem getting moode status for artwork')
 
@@ -238,9 +241,12 @@ def get_artwork_url():
                 log_message(json.dumps(json_resp, indent = 4))
 
             albumart = json_resp['albumart']
-            artwork_url = "http://%s:3001%s" % (
-                   gv_server_ip,
-                   albumart)
+            if albumart.startswith('http'):
+                artwork_url = albumart
+            else:
+                artwork_url = "http://%s:3001%s" % (
+                        gv_server_ip,
+                        albumart)
         except:
             log_message('Problem getting volumio status for artwork')
 
