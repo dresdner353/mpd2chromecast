@@ -1,4 +1,4 @@
-## Instalation on moOde platforms
+## Installation on moOde platforms
 
 Install the related Python3 components:
 ```
