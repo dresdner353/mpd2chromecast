@@ -239,7 +239,7 @@ def get_artwork_url():
 
             albumart = json_resp['albumart']
             artwork_url = "http://%s:3001%s" % (
-                   server_ip,
+                   gv_server_ip,
                    albumart)
         except:
             log_message('Problem getting volumio status for artwork')
