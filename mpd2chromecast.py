@@ -3,7 +3,7 @@
 
 import pychromecast
 import mpd
-import mutagen
+import requests
 import threading
 import argparse
 import time
@@ -23,6 +23,28 @@ def log_message(message):
 # Config inits
 gv_cfg_filename = ""
 gv_chromecast_name = ""
+gv_cast_port = 8080
+gv_streamer_variant = "Unknown"
+
+
+def determine_streamer_variant():
+    # Determine the stream variant we have
+    # as some variations apply in how things work
+
+    global gv_streamer_variant
+
+    if (os.path.exists('/usr/local/bin/moodeutl') or
+            os.path.exists('/usr/bin/moodeutl')):
+        gv_streamer_variant = 'moOde'
+
+    elif (os.path.exists('/usr/local/bin/volumio') or
+            os.path.exists('/usr/bin/volumio')):
+        gv_streamer_variant = 'Volumio'
+
+    log_message('Streamer is identified as %s' % (
+        gv_streamer_variant))
+
+
 
 def get_chromecast():
     global gv_chromecast_name
@@ -118,6 +140,7 @@ class stream_handler(object):
 
 
 def web_server():
+    global gv_cast_port
 
     # engine config
     cherrypy.config.update(
@@ -131,7 +154,7 @@ def web_server():
 
     # Listen on our port on any IF
     cherrypy.server.socket_host = '0.0.0.0'
-    cherrypy.server.socket_port = 8000
+    cherrypy.server.socket_port = gv_cast_port
 
     # webhook for audio streaming
     # set up for directory serving
@@ -156,9 +179,10 @@ def web_server():
     cherrypy.engine.block()
 
 
-def mpd_file_to_url(
-        server_ip,
-        mpd_file):
+def mpd_file_to_url(mpd_file):
+    global gv_server_ip
+    global gv_cast_port
+
     # Radio/external stream
     # URL will start with http
     if mpd_file.startswith('http'):
@@ -166,8 +190,9 @@ def mpd_file_to_url(
         type = "audio/mp3"
     else:
         # Format file URL as path from our web server
-        cast_url = "http://%s:8000/music/%s" % (
-                server_ip,
+        cast_url = "http://%s:%d/music/%s" % (
+                gv_server_ip,
+                gv_cast_port,
                 mpd_file)
 
         # Split out extension of file
@@ -179,73 +204,45 @@ def mpd_file_to_url(
     return (cast_url, type)
 
 
-def mpd_file_to_artwork_url(
-        server_ip,
-        mpd_file):
+def get_artwork_url():
+    global gv_server_ip
+    global gv_cast_port
+    global gv_streamer_variant
 
-
-    artwork_mime = None
-    artwork_data = None
     artwork_url = None
+    api_session = requests.session()
 
-    # Analyse file with mutagen and try to extract artwork
-    mrec = mutagen.File('/mnt/' + mpd_file)
+    if gv_streamer_variant == 'moOde':
+        try:
+            resp = api_session.get('http://localhost/engine-mpd.php')
+            json_resp = resp.json()
+            if gv_verbose:
+                log_message(json.dumps(json_resp, indent = 4))
 
-    if type(mrec) == mutagen.flac.FLAC:
-        if (len(mrec.pictures) > 0):
-            artwork_mime = mrec.pictures[0].mime
-            artwork_data = mrec.pictures[0].data
+            albumart = json_resp['coverurl']
+            artwork_url = "http://%s%s" % (
+                    gv_server_ip,
+                    albumart)
+        except:
+            log_message('Problem getting moode status for artwork')
 
-    elif type(mrec) == mutagen.mp3.MP3:
-        for tag in mrec.tags.keys():
-            if tag.startswith('APIC'):
-                artwork_mime = mrec.tags[tag].mime
-                artwork_data = mrec.tags[tag].data
-                break
 
-    elif type(mrec) == mutagen.mp4.MP4:
-        if 'covr' in mrec.tags:
-            artwork_data = mrec.tags['covr'][0]
-            if mrec.tags['covr'][0].imageformat == 13:
-                artwork_mime = 'image/jpg'
-            else:
-                artwork_mime = 'image/png'
+    elif gv_streamer_variant == 'Volumio':
+        try:
+            resp = api_session.get('http://localhost:3000/api/v1/getstate')
+            json_resp = resp.json()
+            if gv_verbose:
+                log_message(json.dumps(json_resp, indent = 4))
 
-    if artwork_data:
-        # Write detected embedded artwork to a file in /tmp
-        # for serving via URL
-        artwork_ext = artwork_mime.replace('image/', '')
-        artwork_filename = 'artwork.%s' % (artwork_ext)
-        aw_file = open('/tmp/' + artwork_filename, 'wb')
-        aw_file.write(artwork_data)
-        aw_file.close()
-
-        artwork_url = 'http://%s:8000/tmp/%s' % (
-                gv_server_ip,
-                artwork_filename)
-        log_message('Artwork URL: %s' % (
-            artwork_url))
-    else:
-        # Fallback, last-ditch is to check container 
-        # directory for the first image file we find
-        # It will be served from the music URL, same one 
-        # used to stream the files for playback
-        log_message("Checking directory for artwork")
-        artwork_file_exts = ['jpg', 'png', 'jpeg', 'gif', 'bmp']
-        search_dir = os.path.dirname('/mnt/' + mpd_file)
-        for file in os.listdir(search_dir):
-            for artwork_ext in artwork_file_exts:
-                if file.lower().endswith(artwork_ext):
-                    artwork_url = 'http://%s:8000/music/%s' % (
-                            gv_server_ip,
-                            os.path.join(search_dir, file))
-                    log_message('Artwork URL: %s' % (
-                        artwork_url))
-                    break
+            albumart = json_resp['albumart']
+            artwork_url = "http://%s:3001%s" % (
+                   server_ip,
+                   albumart)
+        except:
+            log_message('Problem getting volumio status for artwork')
 
 
     return artwork_url
-
 
 
 def mpd_agent():
@@ -352,7 +349,7 @@ def mpd_agent():
             progress))
 
         # Chromecast URLs for media and artwork
-        cast_url, cast_file_type = mpd_file_to_url(gv_server_ip, mpd_file)
+        cast_url, cast_file_type = mpd_file_to_url(mpd_file)
 
         # Chromecast Status
         if (cast_device):
@@ -524,11 +521,11 @@ def mpd_agent():
             args['title'] = title
             args['autoplay'] = True
 
-            artwork_url = mpd_file_to_artwork_url(
-                    gv_server_ip,
-                    mpd_file)
+            artwork_url = get_artwork_url()
             if artwork_url:
                 args['thumb'] = artwork_url
+                log_message("Artwork URL:%s" % (
+                    artwork_url))
 
             # Let the magic happen
             # Wait for the connection and then issue the 
@@ -614,6 +611,9 @@ s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.connect(("8.8.8.8", 80))
 gv_server_ip = s.getsockname()[0]
 s.close()
+
+# Determine variant
+determine_streamer_variant()
 
 # Thread management and main loop
 thread_list = []
