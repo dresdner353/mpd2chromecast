@@ -7,7 +7,7 @@ The script uses an python-mpd2 (https://github.com/Mic92/python-mpd2) to monitor
 As you invoke play, stop, pause, next/previous and seek actions on your media platform, these are detected by the MPD interface and then relayed to the Chromecast to match the behaviour. The script also provides album artwork support that will appear on screen for video-based chromecasts.
 
 ## Installation
-For installation on Volumio, [see moOde README](./volumio.md)  
+For installation on Volumio, [see Volumio README](./volumio.md)  
 For installation on moOde, [see moOde README](./moOde.md)  
 
 ## Selecting Desired Chromecast
