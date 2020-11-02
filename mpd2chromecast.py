@@ -4,6 +4,7 @@
 import pychromecast
 import mpd
 import requests
+import urllib
 import threading
 import argparse
 import time
@@ -191,10 +192,11 @@ def mpd_file_to_url(mpd_file):
         type = "audio/mp3"
     else:
         # Format file URL as path from our web server
+        # mpd_file path is also made web-safe
         cast_url = "http://%s:%d/music/%s" % (
                 gv_server_ip,
                 gv_cast_port,
-                mpd_file)
+                urllib.parse.quote(mpd_file))
 
         # Split out extension of file
         # probably not necessary as chromecast seems to work it
@@ -514,7 +516,7 @@ def mpd_agent():
             (mpd_status == 'play' and mpd_file != cast_file)):
 
             log_message("Casting URL:%s type:%s" % (
-                cast_url.encode('utf-8'),
+                cast_url,
                 cast_file_type))
 
             args = {}
