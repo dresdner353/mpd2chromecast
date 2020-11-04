@@ -211,6 +211,7 @@ def get_artwork_url():
     global gv_server_ip
     global gv_cast_port
     global gv_streamer_variant
+    global gv_verbose
 
     artwork_url = None
     api_session = requests.session()
