@@ -13,6 +13,7 @@ import sys
 import cherrypy
 import json
 import socket
+import pathlib
 
 
 def log_message(message):
@@ -26,6 +27,10 @@ gv_cfg_filename = ""
 gv_chromecast_name = ""
 gv_cast_port = 8080
 gv_streamer_variant = "Unknown"
+
+# Fixed MPD music location
+# may make this configurable in time
+gv_mpd_music_dir = '/var/lib/mpd/music'
 
 
 def determine_streamer_variant():
@@ -143,6 +148,7 @@ class stream_handler(object):
 
 def web_server():
     global gv_cast_port
+    global gv_mpd_music_dir
 
     # engine config
     cherrypy.config.update(
@@ -160,16 +166,11 @@ def web_server():
 
     # webhook for audio streaming
     # set up for directory serving
-    # via /mnt
+    # via /var/lib/mpd/music
     web_conf = {
        '/music': {
            'tools.staticdir.on': True,
-           'tools.staticdir.dir': '/mnt',
-           'tools.staticdir.index': 'index.html',
-       },
-       '/tmp': {
-           'tools.staticdir.on': True,
-           'tools.staticdir.dir': '/tmp',
+           'tools.staticdir.dir': gv_mpd_music_dir,
            'tools.staticdir.index': 'index.html',
        }
     }
@@ -207,52 +208,32 @@ def mpd_file_to_url(mpd_file):
     return (cast_url, type)
 
 
-def get_artwork_url():
+def get_albumart_url(mpd_file):
     global gv_server_ip
     global gv_cast_port
-    global gv_streamer_variant
     global gv_verbose
 
-    artwork_url = None
-    api_session = requests.session()
+    art_names = [
+            'cover.png',
+            'cover.jpg',
+            'cover.tiff',
+            'cover.bmp'
+            ]
 
-    if gv_streamer_variant == 'moOde':
-        try:
-            resp = api_session.get('http://localhost/engine-mpd.php')
-            json_resp = resp.json()
-            if gv_verbose:
-                log_message(json.dumps(json_resp, indent = 4))
+    albumart_url = None
 
-            albumart = json_resp['coverurl']
-            if albumart.startswith('http'):
-                artwork_url = albumart
-            else:
-                artwork_url = "http://%s%s" % (
-                        gv_server_ip,
-                        albumart)
-        except:
-            log_message('Problem getting moode status for artwork')
+    mpd_path = pathlib.Path(gv_mpd_music_dir + '/' + mpd_file)
 
+    for name in art_names:
+        cover_file = str(mpd_path.parent / name)
+        if os.path.exists(cover_file):
+            albumart_url = "http://%s:%d/music%s" % (
+                    gv_server_ip,
+                    gv_cast_port,
+                    urllib.parse.quote(cover_file))
+            break
 
-    elif gv_streamer_variant == 'Volumio':
-        try:
-            resp = api_session.get('http://localhost:3000/api/v1/getstate')
-            json_resp = resp.json()
-            if gv_verbose:
-                log_message(json.dumps(json_resp, indent = 4))
-
-            albumart = json_resp['albumart']
-            if albumart.startswith('http'):
-                artwork_url = albumart
-            else:
-                artwork_url = "http://%s:3001%s" % (
-                        gv_server_ip,
-                        albumart)
-        except:
-            log_message('Problem getting volumio status for artwork')
-
-
-    return artwork_url
+    return albumart_url
 
 
 def mpd_agent():
@@ -358,7 +339,7 @@ def mpd_agent():
             duration_secs,
             progress))
 
-        # Chromecast URLs for media and artwork
+        # Chromecast URL for media
         cast_url, cast_file_type = mpd_file_to_url(mpd_file)
 
         # Chromecast Status
@@ -531,11 +512,11 @@ def mpd_agent():
             args['title'] = title
             args['autoplay'] = True
 
-            artwork_url = get_artwork_url()
-            if artwork_url:
-                args['thumb'] = artwork_url
-                log_message("Artwork URL:%s" % (
-                    artwork_url))
+            albumart_url = get_albumart_url(mpd_file)
+            if albumart_url:
+                args['thumb'] = albumart_url
+                log_message("Albumart URL:%s" % (
+                    albumart_url))
 
             # Let the magic happen
             # Wait for the connection and then issue the 
