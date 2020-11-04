@@ -213,6 +213,10 @@ def get_albumart_url(mpd_file):
     global gv_cast_port
     global gv_verbose
 
+    # Ignore URLs
+    if mpd_file.startswith('http'):
+        return None
+
     art_names = [
             'cover.png',
             'cover.jpg',
