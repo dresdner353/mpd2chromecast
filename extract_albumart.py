@@ -23,7 +23,8 @@ art_names = [
         'cover.png',
         'cover.jpg',
         'cover.tiff',
-        'cover.bmp'
+        'cover.bmp',
+        'cover.gif',
         ]
 
 music_file_exts = [
@@ -33,9 +34,16 @@ music_file_exts = [
         'm4a',
         ]
 
+total_created = 0
+total_failures = 0
+total_existing = 0
+total_dirs_scanned = 0
+
 for root, dirs, files in os.walk(
         mpd_dir,
         followlinks = True):
+    total_dirs_scanned += 1
+    print('Scanned %d directories        ' % (total_dirs_scanned), end = '\r')
     # test for cover.XXX in directory
     cover_exists = False
     for name in art_names:
@@ -45,7 +53,7 @@ for root, dirs, files in os.walk(
             break
 
     if cover_exists:
-        print('Cover already exists.. %s' % (cover_file))
+        total_existing += 1
         continue
 
     # Scan files that match music extension and 
@@ -58,11 +66,12 @@ for root, dirs, files in os.walk(
                  break
 
         if source_file:
+            # skip any further file checks
             break
 
     if source_file:
-        print('Check %s for artwork' % (source_file))
-        # Analyse file with mutagen and try to extract artwork
+        print('Extracting albumart from %s' % (source_file))
+        # Analyse file with mutagen and try to extract albumart
         mrec = mutagen.File(source_file)
 
         if type(mrec) == mutagen.flac.FLAC:
@@ -86,13 +95,25 @@ for root, dirs, files in os.walk(
                     albumart_mime = 'image/png'
 
         if albumart_data:
-            # Write detected embedded artwork to a file
+            # Write detected embedded albumart to a file
             albumart_ext = albumart_mime.replace('image/', '')
             if albumart_ext == 'jpeg':
                 albumart_ext = 'jpg'
             albumart_filename = 'cover.%s' % (albumart_ext)
             albumart_path = os.path.join(root, albumart_filename)
-            print('Creating %s' % (albumart_path))
-            aa_file = open(albumart_path, 'wb')
-            aa_file.write(albumart_data)
-            aa_file.close()
+            try:
+                aa_file = open(albumart_path, 'wb')
+                aa_file.write(albumart_data)
+                aa_file.close()
+                total_created += 1
+                print('Created %s' % (albumart_path))
+            except:
+                print('Failed to create %s' % (albumart_path))
+                total_failures += 1
+
+
+print('\n\nComplete')
+print('Scanned %d directories' % (total_dirs_scanned))
+print('Created %d covers' % (total_created))
+print('Failed to create %d covers' % (total_failures))
+print('Found %d existing covers' % (total_existing))
