@@ -137,6 +137,8 @@ The standard video chromecast does not work with these files at all. Playback be
 ## Albumart & The Default Media Receiver
 The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously desired to get albumart functional as the default media receiver can display albumart.
 
+![Chromecast Default Media Receiver](./cc_default_media_receiver.jpg)
+
 However, getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet working (although it seems to be present in the code). Both Volumio and moOde have their own ways of extracting album art separate from MPD but neither make it seamless to grab this data via native APIs. The main issue was timing where the native API is not in always sync with the MPD playlist. It became a hit and miss in getting accurate albumart with the wrong image often being served up. 
 
 So in the end, I copied what MPD server-side itself does... when a track is being cast, the script checks the parent directory of the said file and checks for cover.(png|jpg|tiff|bmp|gif). If that file is found, it generates a URL for this file and serves it to the Chromecast along with the audio file URL.
