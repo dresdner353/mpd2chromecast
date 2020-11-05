@@ -11,4 +11,4 @@ cd
 git clone https://github.com/dresdner353/volumio2chromecast.git
 ```
 
-Continue the setup and testing [here].(./READNE.md)  
+Continue the setup and testing [here](./README.md). 
