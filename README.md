@@ -98,7 +98,7 @@ This will cause the script to disconnect from any existing cast device and disab
 ## How it works
 The script runs four threads:
 * MPD/Chromecast  
-This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to configured chromecast. It also monitors the chromecast status to ensure playback is operational. The native APIs for both Volumio and moOde are also used when performing the cast request but only to obtain the artwork for the current song. That detail is not available via the MPD API.
+This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
 This thread provides a simple web server which is used to serve a URL for each track. The chromecasts will use that URL to stream the files for native playback.
@@ -109,16 +109,37 @@ This thread just monitors config (~/.castrc) and changes one internal global var
 * Chromecast Discovery  
 This thread runs on loop every minute, scanning for available chromecasts and stores the names (in /tmp/castdevices). The intention here is to get platform plugins to leverage that detail for something like a GUI selection of the desired chromecast. The same file is also used for a faster execution of set_chromecast.py (when the --discover option is omitted) instead of having to wait for a scan each time.
 
-## File types that work
-MPD will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer. We're serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
+## Audio file types that work
+MPD will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer and serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
 
 ### MP3 16/320kbps & FLAC 2.0 16/44
-I've had perfect results on all variants of Chromecast (Video, Audio and Home) with standard MP3 320 and FLAC 2.0 16/44. I did not try raw WAV 16/44 but assume it would also work.
+I've had perfect results on all variants of Chromecast (Video, Audio and Home) with standard MP3 320, aac files (Apple m4a) and FLAC 2.0 16/44. I did not try ogg or raw WAV 16/44 but assume it would also work.
 
 ### FLAC 2.0 24/96
-For 2-channel 24/96 high-res, the normal video Chromecast will play them back but I've noticed it streams into my AVR via HDMI as 48Khz (not certain if that is 16/24 as the AVR does not say). The same 2.0 24/96 seems to stream out of the Chromecast Audio as a SPDIF digital bitstream but will not work with my AVR. It does work with my SMSL headphone amp. So I'm suspecting my Onkyo AVR does not support 24/96 PCM via its SPDIF. But to be clear, I don't know for sure what is coming out from that SPIDF. The headphone amp does not have a display or readout to confirm what it is receiving.
+For 2-channel 24/96 high-res, the standard HD & 4K video Chromecasts will play them back but I've noticed it streams into my AVR via HDMI as 48Khz. The same 2.0 24/96 seems to stream out of the Chromecast Audio as a SPDIF digital bitstream.
 
 ### FLAC 5.1 24/96
-The normal video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work OK with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. The SPDIF output also worked with my headphone amp but like above I'm not able to confirm what is being output other than my AVR will not play it and my headphone amp will. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
+The standard video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work but with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
 
-So I hope you find this useful for you if you are trying to get MPD to play nice with Chromecast. 
+## Albumart & The Default Media Receiver
+The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously desired to get albumart functional as the default media receiver can display albumart.
+
+However, getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet working (although it seems to be present in the code). Both Volumio and moOde have their own ways of extracting album art separate from MPD but neither make it seamless to grab this data via native APIs. The main issue was timing where the native API is not in always sync with the MPD playlist. It became a hit and miss in getting accurate albumart with the wrong image often being served up. 
+
+So in the end, I copied what MPD server-side itself does... when a track is being cast, the script checks the parent directory of the said file and checks for cover.(png|jpg|tiff|bmp|gif). If that file is found, it generates a URL for this file and serves it to the Chromecast along with the audio file URL.
+
+Not everyone will have a cover.XXX file in each album folder. So I wrote an assistant python script (extract_albumart.py) which uses the Python mutagen module to scan a filesystem of music files, test for non-presence of cover.XXX files and then try to extract the first image from the first music file it finds in each directory. It's not a guarantee scenario expecially if separate artwork exists per file, but its a decent shot at filling in the gaps.
+
+To use the script, you would need to have your music resource mounted in read-write mode. This may be fine for attached USB storage but bear in mind, if trying this with a NAS mount, you would need to modify the mount settings, ensuring the "rw" option is added.
+
+The script is invoked as follows:
+```
+sudo pip3 install mutagen 
+python3 volumio2chromecast/extract_albumart.py --mpd_dir /var/lib/mpd/music
+```
+The --mpd_dir option specifies the root directory to start from. If omitted, it defaults to /var/lib/mpd/music. You can set this to any mount point on the system and could test it on a smaller sub-directory initially. 
+
+When the script exits, it will report the total number of directories scanned, and covers it created or faied to create
+
+## Conclusions
+So I hope you find this useful if you are trying to get Volumio, moOde etc to play nice with Chromecast. 
