@@ -135,7 +135,7 @@ For 2-channel 24/96 high-res, the standard HD & 4K video Chromecasts will play t
 The standard video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work but with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
 
 ## Albumart & The Default Media Receiver
-The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously desired to get albumart functional as the default media receiver can display albumart.
+The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously a goal to get albumart functional as the default media receiver can display it.
 
 Example of how this albumart appears:
 ![Chromecast Default Media Receiver](./cc_default_media_receiver.jpg)
