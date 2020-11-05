@@ -503,6 +503,7 @@ def mpd_agent():
             cast_device.media_controller.stop()
             cast_status = mpd_status
             cast_device = None
+            cast_volume = 0
             continue
 
         # Play a song or stream or next in playlist
@@ -529,6 +530,15 @@ def mpd_agent():
             # Wait for the connection and then issue the 
             # URL to stream
             cast_device.wait()
+
+            if (cast_volume != mpd_volume):
+                # Set volume to match local MPD volume
+                # avoids sudden volume changes after playback starts when 
+                # they sync up
+                log_message("Setting Chromecast Volume: %.2f" % (mpd_volume))
+                cast_device.set_volume(mpd_volume)
+
+            # Initiate the cast
             cast_device.media_controller.play_media(
                     cast_url, 
                     **args)
@@ -536,6 +546,7 @@ def mpd_agent():
             # Note the various specifics of play 
             cast_status = mpd_status
             cast_file = mpd_file
+            cast_volume = mpd_volume
 
             # Pause and seek to start of track
             # only applies to local files
