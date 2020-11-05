@@ -2,9 +2,22 @@
 
 This is a python script and related shell wrapper that you can deploy on a Volumio or moOde installation and use it to integrate single and multi-room playback with Google Chromecast devices and all variants such as Google/Nest Home speakers.
 
-The script uses an python-mpd2 (https://github.com/Mic92/python-mpd2) to monitor playback state of MPD, the underlying media player layer used by both Volumio and moOde. It then generates and sends a URL for the playing file to the target chromecast device or group. The chromecast then streams the file contents and plays the file. The script uses pychromecast (https://github.com/balloob/pychromecast) for the Google Cast integration. 
+The script uses an MPD client to monitor playback state of MPD, the underlying media player layer used by both Volumio and moOde. It then generates and sends a URL for the playing file to the target chromecast device or group. The chromecast then streams the file contents and plays the file. 
 
-As you invoke play, stop, pause, next/previous and seek actions on your media platform, these are detected by the MPD interface and then relayed to the Chromecast to match the behaviour. The script also provides album artwork support that will appear on screen for video-based chromecasts.
+As you invoke play, stop, pause, next/previous, seek actions & volume control on your media platform, these are detected by the MPD interface and then relayed to the Chromecast to match the behaviour. The script also provides album artwork support that will appear on screen for video-based chromecasts.
+
+## Acknowledgements
+The script would not be possible without the dedicated hard work of others who wrote various modules that made my job a lot easier:
+
+* python-mp2 (https://github.com/Mic92/python-mpd2)  
+This module implements an MPD client API that made everything very consistent. Prior to using this module, I was talking directly to the Volumio and moOde APIs but this approach is a lot better.
+
+* pychromecast (https://github.com/balloob/pychromecast)  
+With this module, we are able to detect and control Chromecast-based devices on the LAN.
+
+* cherrypy (cherrypy.org)  
+All URL serving provided by this script is made possible by the cherrypy module. Python does come with it's own HTTP libraries for client and server but they can be quite complex when playing a web server role. Cherrypy provides a much more mature and reliable framework for providing a directory URL server needed for the media and albumart files.
+
 
 ## Installation
 For installation on Volumio, [see Volumio README](./volumio.md)  
