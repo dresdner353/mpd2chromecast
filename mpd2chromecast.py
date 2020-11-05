@@ -226,15 +226,17 @@ def get_albumart_url(mpd_file):
 
     albumart_url = None
 
-    mpd_path = pathlib.Path(gv_mpd_music_dir + '/' + mpd_file)
+    mpd_rel_path = pathlib.Path(mpd_file)
+    mpd_full_path = pathlib.Path(gv_mpd_music_dir + '/' + mpd_file)
 
     for name in art_names:
-        cover_file = str(mpd_path.parent / name)
+        cover_file = str(mpd_full_path.parent / name)
+        cover_rel_file = str(mpd_rel_path.parent / name)
         if os.path.exists(cover_file):
-            albumart_url = "http://%s:%d/music%s" % (
+            albumart_url = "http://%s:%d/music/%s" % (
                     gv_server_ip,
                     gv_cast_port,
-                    urllib.parse.quote(cover_file))
+                    urllib.parse.quote(cover_rel_file))
             break
 
     return albumart_url
