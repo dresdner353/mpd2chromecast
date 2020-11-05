@@ -221,7 +221,8 @@ def get_albumart_url(mpd_file):
             'cover.png',
             'cover.jpg',
             'cover.tiff',
-            'cover.bmp'
+            'cover.bmp',
+            'cover.gif',
             ]
 
     albumart_url = None
