@@ -27,6 +27,7 @@ gv_cfg_filename = ""
 gv_chromecast_name = ""
 gv_cast_port = 8080
 gv_streamer_variant = "Unknown"
+gv_discovered_devices = ['Off']
 
 # Fixed MPD music location
 # may make this configurable in time
@@ -56,7 +57,7 @@ def get_chromecast():
     global gv_chromecast_name
 
     if (not gv_chromecast_name or 
-            gv_chromecast_name == 'off'):
+            gv_chromecast_name == 'Off'):
         return None
 
     log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
@@ -112,7 +113,7 @@ def config_agent():
 
 
 def chromecast_agent():
-    last_check = 0
+    global gv_discovered_devices
 
     discovered_devices_file = '/tmp/castdevices'
 
@@ -123,16 +124,21 @@ def chromecast_agent():
         log_message("Discovered %d chromecasts" % (
             total_devices))
 
+        gv_discovered_devices = []
+        gv_discovered_devices.append('Off')
+        total_devices += 1
+        for cc in devices:
+            gv_discovered_devices.append(cc.device.friendly_name)
+
         index = 0
         f = open(discovered_devices_file, "w")
-        f.write("off\n") # default "off" device
-        for cc in devices:
+        for device in gv_discovered_devices:
             index += 1
             log_message("%d/%d %s" % (
                 index, 
                 total_devices,
-                cc.device.friendly_name))
-            f.write("%s\n" % (cc.device.friendly_name))
+                device))
+            f.write("%s\n" % (device))
 
         f.close()
 
@@ -141,9 +147,107 @@ def chromecast_agent():
 
     return 
 
+
+def build_cast_web_page():
+    global gv_discovered_devices
+    global gv_chromecast_name
+
+    header_tmpl = """
+        <link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css'>
+        <script src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js'></script>
+        <script src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js'></script>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+    """
+
+    web_page_str = header_tmpl
+
+    # main container
+    web_page_str += (
+            '<div class="container-fluid">'
+            '<div class="card" style="width: 18rem;">'
+            ) 
+
+    cast_icon_svg = (
+            ' <svg width="2em" height="2em" viewBox="0 0 16 16" class="bi bi-cast" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' 
+            '   <path d="M7.646 9.354l-3.792 3.792a.5.5 0 0 0 .353.854h7.586a.5.5 0 0 0 .354-.854L8.354 9.354a.5.5 0 0 0-.708 0z"/>' 
+            '   <path d="M11.414 11H14.5a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-13a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h3.086l-1 1H1.5A1.5 1.5 0 0 1 0 10.5v-7A1.5 1.5 0 0 1 1.5 2h13A1.5 1.5 0 0 1 16 3.5v7a1.5 1.5 0 0 1-1.5 1.5h-2.086l-1-1z"/>'
+            ' </svg>'
+            )
+
+    # Chromecast combo box start
+    web_page_str += (
+            '<form action="/cast" method="post">'
+            '<div class="input-group mb-3">'
+            '%s &nbsp;'
+            '<select class="custom-select custom-select" name="chromecast">'
+            ) % (cast_icon_svg)
+
+    for device in gv_discovered_devices:
+        if device == gv_chromecast_name:
+            selected_str = 'selected'
+        else:
+            selected_str = ''
+        web_page_str += (
+                '     <option value="%s" %s>%s</option>' % (
+                    device, 
+                    selected_str, 
+                    device)
+                )
+
+    # Chromecast combo box end with action button
+    web_page_str += (
+            '</select>'
+            '<button type="submit" class="btn btn-primary btn">Apply</button>'
+            '</div>'
+            '<a class="btn btn-primary btn" href="/cast" role="button">Refresh</a>'
+            '</form>'
+            )
+
+
+    # main container
+    web_page_str += (
+            '</div>'
+            '</div>'
+            )
+
+    return web_page_str
+
+
 # dummy stream handler object for cherrypy
 class stream_handler(object):
     pass
+
+
+class cast_handler(object):
+    @cherrypy.expose()
+
+    def index(self, chromecast = None):
+        global gv_chromecast_name
+
+        log_message("device client:%s:%d params:%s" % (
+            cherrypy.request.remote.ip,
+            cherrypy.request.remote.port,
+            cherrypy.request.params))
+
+        if chromecast:
+            log_message('Changing target chromecast to %s' % (
+                chromecast))
+
+            # Make change instantly
+            gv_chromecast_name = chromecast
+
+            # Also update config to make chanfge persistent
+            home = os.path.expanduser("~")
+            cfg_file = open(home + '/.castrc', 'w') 
+            json_cfg = {}
+            json_cfg['chromecast'] = chromecast
+            cfg_file.write('%s\n' % (json.dumps(json_cfg)))
+            cfg_file.close()
+
+        return build_cast_web_page()
+
+    # Force trailling slash off on called URL
+    index._cp_config = {'tools.trailing_slash.on': False}
 
 
 def web_server():
@@ -167,15 +271,19 @@ def web_server():
     # webhook for audio streaming
     # set up for directory serving
     # via /var/lib/mpd/music
-    web_conf = {
-       '/music': {
-           'tools.staticdir.on': True,
-           'tools.staticdir.dir': gv_mpd_music_dir,
-           'tools.staticdir.index': 'index.html',
-       }
+    stream_conf = {
+        '/music' : {
+            'tools.staticdir.on': True,
+            'tools.staticdir.dir': gv_mpd_music_dir,
+            'tools.staticdir.index': 'index.html',
+        }
     }
 
-    cherrypy.tree.mount(stream_handler(), '/', web_conf)
+    # Nothing special in play for the /cast API
+    cast_conf = {}
+
+    cherrypy.tree.mount(stream_handler(), '/', stream_conf)
+    cherrypy.tree.mount(cast_handler(), '/cast', cast_conf)
 
     # Cherrypy main loop blocking
     cherrypy.engine.start()
