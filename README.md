@@ -109,7 +109,8 @@ Setting desired Chromecast to [off]
 This will cause the script to disconnect from any existing cast device and disable any further attempts to connect to a chromecast until the configured device name is again changed.
 
 ## Web Interface (experimental)
-Browse to your http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click Update and it will set that as the active cast device. You can also refresh the list using the Refresh button.
+![Cast Control Web Interface](./cast_web_control.jpg)
+Browse to your http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
 
 ## How it works
 The script runs four threads:
