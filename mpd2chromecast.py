@@ -92,6 +92,7 @@ def load_config(cfg_filename):
 def config_agent():
     # monitor the config file and react on changes
     global gv_cfg_filename
+    global gv_discovered_devices
 
     home = os.path.expanduser("~")
     gv_cfg_filename = home + '/.castrc'
@@ -117,9 +118,24 @@ def chromecast_agent():
 
     discovered_devices_file = '/tmp/castdevices'
 
-    # 1-minute interval for chromecast scan
+    # initial load if the file exists
+    if os.path.exists(discovered_devices_file):
+        gv_discovered_devices = []
+        with open(discovered_devices_file) as f:
+            devices = f.read().splitlines()
+            for device in devices:
+                gv_discovered_devices.append(device)
+
     while (1):
-        devices, browser = pychromecast.get_chromecasts()
+        # only repeat once every 60 seconds
+        time.sleep(60)
+
+        try:
+            devices, browser = pychromecast.get_chromecasts()
+        except:
+            log_message("Chromecast discovery failed")
+            continue
+
         total_devices = len(devices)
         log_message("Discovered %d chromecasts" % (
             total_devices))
@@ -129,6 +145,10 @@ def chromecast_agent():
         total_devices += 1
         for cc in devices:
             gv_discovered_devices.append(cc.device.friendly_name)
+
+        # Release all resources
+        devices = None
+        browser = None
 
         index = 0
         f = open(discovered_devices_file, "w")
@@ -142,8 +162,6 @@ def chromecast_agent():
 
         f.close()
 
-        # only repeat once every 60 seconds
-        time.sleep(60)
 
     return 
 
@@ -408,7 +426,7 @@ def mpd_agent():
 
         # mandatory fields
         mpd_status = mpd_client_status['state']
-        mpd_volume = int(mpd_client_status['volume']) / 100 
+        mpd_volume = int(mpd_client_status['volume'])
 
         # optionals (will depend on given state and stream vs file
         mpd_elapsed = 0
@@ -445,9 +463,9 @@ def mpd_agent():
             album,
             title))
 
-        log_message("MPD (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
+        log_message("MPD (%s) vol:%d %d:%02d/%d:%02d [%02d%%]" % (
             mpd_status,
-            int(mpd_volume * 100),
+            mpd_volume,
             elapsed_mins,
             elapsed_secs,
             duration_mins,
@@ -500,7 +518,7 @@ def mpd_agent():
             log_message("%s (%s) vol:%02d %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
                 cast_status,
-                int(cast_volume * 100),
+                cast_volume,
                 elapsed_mins,
                 elapsed_secs,
                 duration_mins,
@@ -534,12 +552,12 @@ def mpd_agent():
                 continue
 
             # Kill off any current app
-            log_message("Waiting for device to get ready..")
             if not cast_device.is_idle:
                 log_message("Killing current running app")
                 cast_device.quit_app()
 
             while not cast_device.is_idle:
+                log_message("Waiting for device to get ready..")
                 time.sleep(1)
 
             # Cast state inits
@@ -580,8 +598,9 @@ def mpd_agent():
         if (cast_status == 'play' and 
                 cast_volume != mpd_volume):
 
-            log_message("Setting Chromecast Volume: %.2f" % (mpd_volume))
-            cast_device.set_volume(mpd_volume)
+            log_message("Setting Chromecast Volume: %d" % (mpd_volume))
+            # Chromecast volume is 0.0 - 1.0 (divide by 100)
+            cast_device.set_volume(mpd_volume / 100)
             cast_volume = mpd_volume
             continue
 
@@ -643,8 +662,9 @@ def mpd_agent():
                 # Set volume to match local MPD volume
                 # avoids sudden volume changes after playback starts when 
                 # they sync up
-                log_message("Setting Chromecast Volume: %.2f" % (mpd_volume))
-                cast_device.set_volume(mpd_volume)
+                log_message("Setting Chromecast Volume: %d" % (mpd_volume))
+                # Chromecast volume is 0.0 - 1.0 (divide by 100)
+                cast_device.set_volume(mpd_volume / 100)
 
             # Initiate the cast
             cast_device.media_controller.play_media(
