@@ -61,8 +61,12 @@ def get_chromecast():
         return None
 
     log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
-    devices, browser = pychromecast.get_listed_chromecasts(
-            friendly_names=[gv_chromecast_name])
+    try:
+        devices, browser = pychromecast.get_listed_chromecasts(
+                friendly_names=[gv_chromecast_name])
+    except:
+        log_message("Failed to get device object (Exception)")
+        return None
 
     if len(devices) > 0:
         log_message("Got device object.. uuid:%s model:%s" % (
