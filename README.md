@@ -30,7 +30,7 @@ You should first run the set_chromecast.py script to perform a scan and then sel
 
 For example:
 ```
-$ ./volumio2chromecast/set_chromecast.py --discover
+$ ./mpd2chromecast/set_chromecast.py --discover
 Discovering Chromecasts.. (this may take a while)
 Found 11 devices
  0   off
@@ -52,7 +52,7 @@ This then saves the selected chromecast name in ~/.castrc.
 
 You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
 ```
-$ ./volumio2chromecast/set_chromecast.py --name 'Office'
+$ ./mpd2chromecast/set_chromecast.py --name 'Office'
 Setting desired Chromecast to [Office]
 ```
 
@@ -61,7 +61,7 @@ Lastly, you can also invoke the script without the --discover option and it will
 ## Test Run
 To get the script running on a terminal, just do the following:
 ```
-LC_ALL=en_US.UTF-8 ~/volumio2chromecast/mpd2chromecast.py 
+LC_ALL=en_US.UTF-8 ~/mpd2chromecast/mpd2chromecast.py 
 ```
 In this mode, the script will output data every second showing playback status for your media player and any related activity from the Chromecast. Once you have the script running, it should start trying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
 
@@ -71,11 +71,11 @@ Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because
 
 To start the agent in the background, use this command:
 ```
-./volumio2chromecast/mpd2chromecast.sh
+./mpd2chromecast/mpd2chromecast.sh
 ```
 You can also force a restart of the agent using the "restart" option:
 ```
-./volumio2chromecast/mpd2chromecast.sh restart
+./mpd2chromecast/mpd2chromecast.sh restart
 ```
 
 ## Enabling the script to run at startup
@@ -89,7 +89,7 @@ sudo /etc/init.d/cron start
    
 crontab -e 
     .. when prompted, select the desired editor and add this line:
-    * * * * * /home/volumio/volumio2chromecast/mpd2chromecast.sh > /dev/null
+    * * * * * /home/volumio/mpd2chromecast/mpd2chromecast.sh > /dev/null
 
 ```
 
@@ -103,7 +103,7 @@ To stop casting, you can normally either pause playback or clear the playlist. Y
 
 However there is an easier way to do this by setting the configured chromecast device to 'off'. 
 ```
-$ ./volumio2chromecast/set_chromecast.py --name 'off'
+$ ./mpd2chromecast/set_chromecast.py --name 'off'
 Setting desired Chromecast to [off]
 ```
 This will cause the script to disconnect from any existing cast device and disable any further attempts to connect to a chromecast until the configured device name is again changed.
@@ -157,7 +157,7 @@ To use the script, you would need to have your music resource mounted in read-wr
 The script is invoked as follows:
 ```
 sudo pip3 install mutagen 
-python3 volumio2chromecast/extract_albumart.py --mpd_dir /var/lib/mpd/music
+python3 mpd2chromecast/extract_albumart.py --mpd_dir /var/lib/mpd/music
 ```
 The --mpd_dir option specifies the root directory to start from. If omitted, it defaults to /var/lib/mpd/music. You can set this to any mount point on the system and could test it on a smaller sub-directory initially. 
 

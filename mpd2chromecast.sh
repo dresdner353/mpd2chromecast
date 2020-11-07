@@ -2,7 +2,7 @@
 #
 # Add this to crontab as follows:
 #
-# * * * * * /home/pi/volumio2chromecast/mpd2chromecast.sh > /dev/null
+# * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh > /dev/null
 #
 # That will run the script every minute and keep the 
 # agent running
@@ -11,7 +11,7 @@
 # restart the app
 #
 
-AGENT=~/volumio2chromecast/mpd2chromecast.py
+AGENT=~/mpd2chromecast/mpd2chromecast.py
 PID_FILE=/tmp/cast.pid
 
 cd
