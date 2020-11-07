@@ -42,7 +42,7 @@ if (cast_name == ""):
         print("Found %d devices" % (len(devices)))
 
         # Default "off" device
-        device_list = ['Off']
+        device_list = ['Disabled']
         for cc in devices:
             device_list.append(cc.device.friendly_name)
 
