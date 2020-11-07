@@ -118,7 +118,7 @@ The script runs four threads:
 This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
-This thread provides a simple web server which is used to serve a URL for each track. The chromecasts will use that URL to stream the files for native playback.
+This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8080 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to a simple control interface hosted on /cast allowing a user to select a desired chromecast device to use.
 
 * Config  
 This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
