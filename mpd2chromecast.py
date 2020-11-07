@@ -27,7 +27,7 @@ gv_cfg_filename = ""
 gv_chromecast_name = ""
 gv_cast_port = 8080
 gv_streamer_variant = "Unknown"
-gv_discovered_devices = ['Off']
+gv_discovered_devices = ['Disabled']
 
 # Fixed MPD music location
 # may make this configurable in time
@@ -57,7 +57,7 @@ def get_chromecast():
     global gv_chromecast_name
 
     if (not gv_chromecast_name or 
-            gv_chromecast_name == 'Off'):
+            gv_chromecast_name == 'Disabled'):
         return None
 
     log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
@@ -145,7 +145,7 @@ def chromecast_agent():
             total_devices))
 
         gv_discovered_devices = []
-        gv_discovered_devices.append('Off')
+        gv_discovered_devices.append('Disabled')
         total_devices += 1
         for cc in devices:
             gv_discovered_devices.append(cc.device.friendly_name)
@@ -177,8 +177,15 @@ def build_cast_web_page():
     header_tmpl = """
         <link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css'>
         <script src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js'></script>
-        <script src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js'></script>
+        <script src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.bundle.min.js'></script>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+
+        <script>
+            $(function () {
+                $('[data-toggle="tooltip"]').tooltip()
+            })
+        </script>
+
     """
 
     web_page_str = header_tmpl
@@ -186,7 +193,9 @@ def build_cast_web_page():
     # main container
     web_page_str += (
             '<div class="container-fluid">'
-            '<div class="card" style="width: 18rem;">'
+            '<div class="card">'
+            '<div class="card-body">'
+            '<h5 class="card-title">Chromecast</h5>'
             ) 
 
     cast_icon_svg = (
@@ -216,18 +225,24 @@ def build_cast_web_page():
                     device)
                 )
 
-    # Chromecast combo box end with action button
+    # Chromecast combo box end with apply button
+    # and refresh button below
     web_page_str += (
             '</select>'
-            '<button type="submit" class="btn btn-primary btn">Apply</button>'
+            '<button type="submit" class="btn btn-primary btn" '
+            'data-toggle="tooltip" data-placement="top" title="Cast to selected device" '
+            '>&#x2713;</button>'
+            '&nbsp;'
+            '<a class="btn btn-primary btn" '
+            'data-toggle="tooltip" data-placement="top" title="Refresh Device List" '
+            'href="/cast" role="button">&#x21bb;</a>'
             '</div>'
-            '<a class="btn btn-primary btn" href="/cast" role="button">Refresh</a>'
             '</form>'
             )
 
-
     # main container
     web_page_str += (
+            '</div>'
             '</div>'
             '</div>'
             )
