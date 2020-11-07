@@ -72,6 +72,7 @@ for root, dirs, files in os.walk(
     if source_file:
         print('Extracting albumart from %s' % (source_file))
         # Analyse file with mutagen and try to extract albumart
+        albumart_data = None
         mrec = mutagen.File(source_file)
 
         if type(mrec) == mutagen.flac.FLAC:
