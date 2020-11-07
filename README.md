@@ -88,8 +88,14 @@ sudo update-rc.d cron enable 2 3 4 5
 sudo /etc/init.d/cron start
    
 crontab -e 
-    .. when prompted, select the desired editor and add this line:
+    when prompted, select the desired editor and add the appropriate
+    line from below...
+
+    # for Volumio, home is /home/volumio 
     * * * * * /home/volumio/mpd2chromecast/mpd2chromecast.sh > /dev/null
+
+    # for moOde, home is in /home/pi
+    * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh > /dev/null
 
 ```
 
