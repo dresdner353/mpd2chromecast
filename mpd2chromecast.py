@@ -180,10 +180,11 @@ def build_cast_web_page():
             '<h5 class="card-title">Chromecast</h5>'
             ) 
 
+    # Google Cast SVG Icon
+    # https://developers.google.com/cast/docs/developers#icons
     cast_icon_svg = (
-            ' <svg width="2em" height="2em" viewBox="0 0 16 16" class="bi bi-cast" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' 
-            '   <path d="M7.646 9.354l-3.792 3.792a.5.5 0 0 0 .353.854h7.586a.5.5 0 0 0 .354-.854L8.354 9.354a.5.5 0 0 0-.708 0z"/>' 
-            '   <path d="M11.414 11H14.5a.5.5 0 0 0 .5-.5v-7a.5.5 0 0 0-.5-.5h-13a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .5.5h3.086l-1 1H1.5A1.5 1.5 0 0 1 0 10.5v-7A1.5 1.5 0 0 1 1.5 2h13A1.5 1.5 0 0 1 16 3.5v7a1.5 1.5 0 0 1-1.5 1.5h-2.086l-1-1z"/>'
+            ' <svg width="2em" height="2em" viewBox="0 0 24 24" class="bi bi-cast" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' 
+            ' <path d="M1,18 L1,21 L4,21 C4,19.34 2.66,18 1,18 L1,18 Z M1,14 L1,16 C3.76,16 6,18.24 6,21 L8,21 C8,17.13 4.87,14 1,14 L1,14 Z M1,10 L1,12 C5.97,12 10,16.03 10,21 L12,21 C12,14.92 7.07,10 1,10 L1,10 Z M21,3 L3,3 C1.9,3 1,3.9 1,5 L1,8 L3,8 L3,5 L21,5 L21,19 L14,19 L14,21 L21,21 C22.1,21 23,20.1 23,19 L23,5 C23,3.9 22.1,3 21,3 L21,3 Z" id="cast" fill="#000000" sketch:type="MSShapeGroup"></path>'
             ' </svg>'
             )
 
