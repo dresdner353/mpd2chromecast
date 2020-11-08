@@ -2,6 +2,7 @@
 # coding=utf-8
 
 import pychromecast
+import zeroconf
 import mpd
 import requests
 import urllib
@@ -26,56 +27,57 @@ def log_message(message):
 gv_cfg_filename = ""
 gv_chromecast_name = ""
 gv_cast_port = 8080
-gv_streamer_variant = "Unknown"
-gv_discovered_devices = ['Disabled']
+gv_platform_variant = "Unknown"
+
+# Discovered Chromecasts dict
+# and related zconf object
+gv_discovered_devices = {}
+gv_zconf = None
 
 # Fixed MPD music location
 # may make this configurable in time
 gv_mpd_music_dir = '/var/lib/mpd/music'
 
 
-def determine_streamer_variant():
+def determine_platform_variant():
     # Determine the stream variant we have
     # as some variations apply in how things work
 
-    global gv_streamer_variant
+    global gv_platform_variant
 
     if (os.path.exists('/usr/local/bin/moodeutl') or
             os.path.exists('/usr/bin/moodeutl')):
-        gv_streamer_variant = 'moOde'
+        gv_platform_variant = 'moOde'
 
     elif (os.path.exists('/usr/local/bin/volumio') or
             os.path.exists('/usr/bin/volumio')):
-        gv_streamer_variant = 'Volumio'
+        gv_platform_variant = 'Volumio'
 
-    log_message('Streamer is identified as %s' % (
-        gv_streamer_variant))
+    log_message('Platform is identified as %s' % (
+        gv_platform_variant))
 
 
 
-def get_chromecast():
-    global gv_chromecast_name
+def get_chromecast(name):
+    global gv_discovered_devices
+    global gv_zconf
 
-    if (not gv_chromecast_name or 
-            gv_chromecast_name == 'Disabled'):
+    if (not name or 
+            name == 'Disabled'):
         return None
 
-    log_message("Connecting to Chromecast %s" % (gv_chromecast_name))
-    try:
-        devices, browser = pychromecast.get_listed_chromecasts(
-                friendly_names=[gv_chromecast_name])
-    except:
-        log_message("Failed to get device object (Exception)")
-        return None
+    log_message("Looking up Chromecast %s" % (name))
 
-    if len(devices) > 0:
-        log_message("Got device object.. uuid:%s model:%s" % (
-            devices[0].uuid,
-            devices[0].model_name))
-        return devices[0]
-    
-    log_message("Failed to get device object")
-    return None
+    device = None
+    if gv_zconf and name in gv_discovered_devices:
+        log_message("device found.. getting API object..")
+        device = pychromecast.get_chromecast_from_service(
+                gv_discovered_devices[name],
+                gv_zconf)
+    else:
+        log_message("device not found")
+
+    return device
 
 
 def load_config(cfg_filename):
@@ -96,7 +98,6 @@ def load_config(cfg_filename):
 def config_agent():
     # monitor the config file and react on changes
     global gv_cfg_filename
-    global gv_discovered_devices
 
     home = os.path.expanduser("~")
     gv_cfg_filename = home + '/.castrc'
@@ -119,53 +120,34 @@ def config_agent():
 
 def chromecast_agent():
     global gv_discovered_devices
+    global gv_zconf
 
-    discovered_devices_file = '/tmp/castdevices'
+    def chromecast_add_callback(uuid, name):
+        # Add discovered device to global dict
+        # keyed on friendly name and stores the full 
+        # service record
+        friendly_name = cast_listener.services[uuid][3]
+        gv_discovered_devices[friendly_name] = cast_listener.services[uuid]
 
-    # initial load if the file exists
-    if os.path.exists(discovered_devices_file):
-        gv_discovered_devices = []
-        with open(discovered_devices_file) as f:
-            devices = f.read().splitlines()
-            for device in devices:
-                gv_discovered_devices.append(device)
+    def chromecast_remove_callback(uuid, name, service):
+        # purge removed devices from the global dict
+        friendly_name = cast_listener.services[uuid][3]
+        if friendly_name in gv_discovered_services:
+            del gv_discovered_devices[friendly_name]
+
+    cast_listener = pychromecast.CastListener(
+            chromecast_add_callback,
+            chromecast_remove_callback)
+
+    gv_zconf = zeroconf.Zeroconf()
+    cast_browser = pychromecast.discovery.start_discovery(
+            cast_listener, 
+            gv_zconf)
 
     while (1):
-        # only repeat once every 60 seconds
-        time.sleep(60)
-
-        try:
-            devices, browser = pychromecast.get_chromecasts()
-        except:
-            log_message("Chromecast discovery failed")
-            continue
-
-        total_devices = len(devices)
-        log_message("Discovered %d chromecasts" % (
-            total_devices))
-
-        gv_discovered_devices = []
-        gv_discovered_devices.append('Disabled')
-        total_devices += 1
-        for cc in devices:
-            gv_discovered_devices.append(cc.device.friendly_name)
-
-        # Release all resources
-        devices = None
-        browser = None
-
-        index = 0
-        f = open(discovered_devices_file, "w")
-        for device in gv_discovered_devices:
-            index += 1
-            log_message("%d/%d %s" % (
-                index, 
-                total_devices,
-                device))
-            f.write("%s\n" % (device))
-
-        f.close()
-
+        time.sleep(30)
+        log_message('Discovered cast devices: %s' % (
+            list(gv_discovered_devices.keys())))
 
     return 
 
@@ -213,7 +195,12 @@ def build_cast_web_page():
             '<select class="custom-select custom-select" name="chromecast">'
             ) % (cast_icon_svg)
 
-    for device in gv_discovered_devices:
+    # Construct a sorted list of discovered device names
+    # and put 'Disabled' at the top
+    device_list = ['Disabled']
+    device_list += sorted(list(gv_discovered_devices.keys()))
+
+    for device in device_list:
         if device == gv_chromecast_name:
             selected_str = 'selected'
         else:
@@ -564,7 +551,7 @@ def mpd_agent():
         # no device curently present
         if (mpd_status == 'play' and 
                 not cast_device):
-            cast_device = get_chromecast()
+            cast_device = get_chromecast(gv_chromecast_name)
             cast_name = gv_chromecast_name
 
             if not cast_device:
@@ -770,7 +757,7 @@ gv_server_ip = s.getsockname()[0]
 s.close()
 
 # Determine variant
-determine_streamer_variant()
+determine_platform_variant()
 
 # Thread management and main loop
 thread_list = []
