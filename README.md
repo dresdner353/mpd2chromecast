@@ -122,13 +122,13 @@ The script runs four threads:
 This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
-This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8080 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide a simple control interface hosted on /cast allowing a user to select a desired cast device.
+This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8080 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide a simple control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
 
 * Config  
 This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
 
 * Chromecast Discovery  
-This thread runs on loop every minute, scanning for available chromecasts and stores the names (in /tmp/castdevices). The intention here is to get platform plugins to leverage that detail for something like a GUI selection of the desired chromecast. The same file is also used for a faster execution of set_chromecast.py (when the --discover option is omitted) instead of having to wait for a scan each time.
+This thread runs on loop every minute, scanning for available chromecasts and uses the details to obtain API handles on the desired chromecast for streaming. 
 
 ## Audio file types that work
 MPD will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer and serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
