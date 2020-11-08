@@ -30,7 +30,7 @@ You should first run the set_chromecast.py script to perform a scan and then sel
 
 For example:
 ```
-$ ./mpd2chromecast/set_chromecast.py --discover
+$ ./mpd2chromecast/set_chromecast.py 
 Discovering Chromecasts.. (this may take a while)
 Found 11 devices
  0   off
@@ -55,8 +55,6 @@ You can also invoke that script with the --name option to directly set the desir
 $ ./mpd2chromecast/set_chromecast.py --name 'Office'
 Setting desired Chromecast to [Office]
 ```
-
-Lastly, you can also invoke the script without the --discover option and it will simply re-list the last scanned list of devices rather than perform a new discovery. This makes for a faster selection and re-selection of the desired cast device.
 
 ## Test Run
 To get the script running on a terminal, just do the following:
