@@ -23,47 +23,22 @@ All URL serving provided by this script is made possible by the cherrypy module.
 For installation on Volumio, [see Volumio README](./volumio.md)  
 For installation on moOde, [see moOde README](./moOde.md)  
 
-## Selecting Desired Chromecast
-After everything is installed and ready to ry out, the first step is to select the desired chromecast or cast-enabled device on your network.
-
-You should first run the set_chromecast.py script to perform a scan and then select the desired device/group. 
-
-For example:
-```
-$ ./mpd2chromecast/set_chromecast.py 
-Discovering Chromecasts.. (this may take a while)
-Found 11 devices
- 0   off
- 1   Living Room
- 2   Downstairs
- 3   Kitchen
- 4   Master Bedroom Wifi
- 5   Living Room Google Home
- 6   Entire House
- 7   All Google Homes
- 8   Office Google Home
- 9   Office Test
-10   Hall Google Home
-11   Kitchen Google Home
-Enter device number: 9
-Setting desired Chromecast to [Office Test]
-```
-This then saves the selected chromecast name in ~/.castrc. 
-
-You can also invoke that script with the --name option to directly set the desired Chromecast without having to scan:
-```
-$ ./mpd2chromecast/set_chromecast.py --name 'Office'
-Setting desired Chromecast to [Office]
-```
-
 ## Test Run
 To get the script running on a terminal, just do the following:
 ```
 LC_ALL=en_US.UTF-8 ~/mpd2chromecast/mpd2chromecast.py 
 ```
-In this mode, the script will output data every second showing playback status for your media player and any related activity from the Chromecast. Once you have the script running, it should start trying to cast the current playlist to the selected chromecast. Try changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
+In this mode, the script will output data every second showing playback status for your media player and any related activity from the Chromecast. 
 
 Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because when left on my default locale (Ireland UTF-8), something went wrong with how UTF-8 characters we being matched between filenames on the disk and the URLs. I suspect it relates to locale specifics not present within the Raspian image. Forcing US UTF-8 sorts this however.
+
+## Web Interface
+![Cast Control Web Interface](./cast_web_control.jpg)
+Browse to http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
+
+Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. Try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
+
+Switch chromecast device and you should experience playback stopping and transferring to the new device. By setting the device to 'Disabled', you will disable the casting functionality.
 
 ## Starting the Agent in the Background
 
@@ -96,25 +71,6 @@ crontab -e
     * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh > /dev/null
 
 ```
-
-## Dynamically switching Chromecast
-When using the saved config approach, the script watches the ~/.castrc file for changes. If it detects a change, it reloads config, re-resolves the Chromecast and switches device. It will also try to stop playback on the current device.
-
-All you need to do is run the set_chromecast.py script and specify the new device or select from its menu. Once saved, the playback should switch devices in about 10-20 seconds, giving time for the change to be detected and discovery of the new device to take place.
-
-## Disabling
-To stop casting, you can normally either pause playback or clear the playlist. You could also disable the casting permanently by deleting/commenting out the crontab entry. 
-
-However there is an easier way to do this by setting the configured chromecast device to 'off'. 
-```
-$ ./mpd2chromecast/set_chromecast.py --name 'off'
-Setting desired Chromecast to [off]
-```
-This will cause the script to disconnect from any existing cast device and disable any further attempts to connect to a chromecast until the configured device name is again changed.
-
-## Web Interface (experimental)
-![Cast Control Web Interface](./cast_web_control.jpg)
-Browse to your http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
 
 ## How it works
 The script runs four threads:
