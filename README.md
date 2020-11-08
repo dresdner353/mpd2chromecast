@@ -34,6 +34,7 @@ Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because
 
 ## Web Interface
 ![Cast Control Web Interface](./cast_web_control.jpg)
+
 Browse to http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
 
 Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. Try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
@@ -103,6 +104,7 @@ The standard Chromecasts, integrated TV devices and Nest Hub devices have a scre
 
 Example of how this albumart appears:
 ![Chromecast Default Media Receiver](./cc_default_media_receiver.jpg)
+
 The title of the current track is shown on the left. That is the only editable text field available to us. The main nuisance is the 'Default Media Receiver' text. There have been requests in the past for Google to remove this or make it editable via metadata in the cast API. To date they have not changed it. It's not easy to see in the image but a larger version of the album art is also faintly displayed in the overall background of the screen.
 
 Getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet working (although it seems to be present in the code). Both Volumio and moOde have their own ways of extracting album art separate from MPD but neither make it seamless to grab this data via native APIs. The main issue was timing where the native API is not always in sync with the MPD playlist. It became a hit and miss in getting accurate albumart with the wrong image often being served up. 
