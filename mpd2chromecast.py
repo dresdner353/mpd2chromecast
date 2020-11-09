@@ -38,6 +38,9 @@ gv_zconf = None
 # may make this configurable in time
 gv_mpd_music_dir = '/var/lib/mpd/music'
 
+# Global MPD agent deadlock timestamp
+gv_mpd_agent_timestamp = 0
+
 
 def determine_platform_variant():
     # Determine the stream variant we have
@@ -68,14 +71,24 @@ def get_chromecast(name):
 
     log_message("Looking up Chromecast %s" % (name))
 
-    device = None
-    if gv_zconf and name in gv_discovered_devices:
-        log_message("device found.. getting API object..")
+    if not gv_zconf:
+        log_message("No zconf service active")
+        return None
+
+    if not name in gv_discovered_devices:
+        log_message("chromecast not found in discovered device services")
+        return None
+
+    try:
+        log_message("Getting chromecast device object")
+        # Get the device handle
+        # FIXME this call has issues
         device = pychromecast.get_chromecast_from_service(
                 gv_discovered_devices[name],
                 gv_zconf)
-    else:
-        log_message("device not found")
+    except:
+        log_message("Failed to chromecast device object")
+        device = None
 
     return device
 
@@ -132,7 +145,7 @@ def chromecast_agent():
     def chromecast_remove_callback(uuid, name, service):
         # purge removed devices from the global dict
         friendly_name = cast_listener.services[uuid][3]
-        if friendly_name in gv_discovered_services:
+        if friendly_name in gv_discovered_devices:
             del gv_discovered_devices[friendly_name]
 
     cast_listener = pychromecast.CastListener(
@@ -380,21 +393,23 @@ def mpd_agent():
     global gv_server_ip
     global gv_chromecast_name
     global gv_verbose
+    global gv_mpd_agent_timestamp
 
+    now = int(time.time())
+
+    # MPD inits
     mpd_client = None
-    cast_device = None # initial state
-    cast_name = ""
-
-    failed_status_update_count = 0
+    mpd_last_status = now
 
     # Cast state inits
+    cast_device = None # initial state
+    cast_name = ""
     cast_status = 'none'
     cast_file = 'none'
     cast_volume = 0
-
-    mpd_elapsed = 0
-
     cast_confirmed = False
+    cast_failed_update_count = 0
+    cast_last_status = now
     
     while (1):
         # 1 sec delay per iteration
@@ -402,9 +417,24 @@ def mpd_agent():
         print() # log output separator
         now = int(time.time())
 
+        # Timestamp loop activity for MPD agent
+        # acts as a deadlock detection in main loop
+        gv_mpd_agent_timestamp = now
+
+        # MPD healthcheck
+        if now - mpd_last_status > 60:
+            log_message("No MPD contact in 60 seconds... exiting")
+            return
+
         if not mpd_client:
-            mpd_client = mpd.MPDClient()
-            mpd_client.connect("localhost", 6600)
+            log_message('Connecting to MPD...')
+            try:
+                mpd_client = mpd.MPDClient()
+                mpd_client.connect("localhost", 6600)
+            except:
+                log_message('Problem getting mpd client')
+                mpd_client = None
+                continue
 
         # Get current MPD status details
         try:
@@ -419,8 +449,9 @@ def mpd_agent():
                     json.dumps(
                         mpd_client_song, 
                         indent = 4)))
+            mpd_last_status = now
         except:
-            # reset.. and let next loop reconect
+            # reset... and let next loop reconect
             log_message('Problem getting mpd status')
             mpd_client = None
             continue
@@ -455,15 +486,15 @@ def mpd_agent():
         if 'title' in mpd_client_song:
             title = mpd_client_song['title']
 
-        # Elapsed time and progress
-        elapsed_mins = int(mpd_elapsed / 60)
-        elapsed_secs = mpd_elapsed % 60
-        duration_mins = int(mpd_duration / 60)
-        duration_secs = mpd_duration % 60
+        # MPD Elapsed time and progress
+        mpd_elapsed_mins = int(mpd_elapsed / 60)
+        mpd_elapsed_secs = mpd_elapsed % 60
+        mpd_duration_mins = int(mpd_duration / 60)
+        mpd_duration_secs = mpd_duration % 60
         if mpd_duration > 0:
-            progress = int(mpd_elapsed / mpd_duration * 100)
+            mpd_progress = int(mpd_elapsed / mpd_duration * 100)
         else:
-            progress = 0
+            mpd_progress = 0
 
         log_message("Current Track:%s/%s/%s" % (
             artist,
@@ -473,11 +504,11 @@ def mpd_agent():
         log_message("MPD (%s) vol:%d %d:%02d/%d:%02d [%02d%%]" % (
             mpd_status,
             mpd_volume,
-            elapsed_mins,
-            elapsed_secs,
-            duration_mins,
-            duration_secs,
-            progress))
+            mpd_elapsed_mins,
+            mpd_elapsed_secs,
+            mpd_duration_mins,
+            mpd_duration_secs,
+            mpd_progress))
 
         # Chromecast URL for media
         cast_url, cast_file_type = mpd_file_to_url(mpd_file)
@@ -489,23 +520,26 @@ def mpd_agent():
             # This can fail sometimes when nothing is really wrong and 
             # then other times when things are wrong :)
             #
-            # So we give it a tolerance of 5 consecutive failures
+            # So we give it a tolerance of 20 consecutive failures
+            max_cast_failed_updates = 20
             try:
                 cast_device.media_controller.update_status()
                 # Reset failed status count
-                failed_status_update_count = 0
+                cast_failed_update_count = 0
+                cast_last_status = now
             except:
-                failed_status_update_count += 1
-                log_message("Failed to get chromecast status.. %d/5" % (
-                    failed_status_update_count))
+                cast_failed_update_count += 1
+                log_message("Failed to get chromecast status... %d/%d" % (
+                    cast_failed_update_count,
+                    max_cast_failed_updates))
 
-                if (failed_status_update_count >= 5):
-                    log_message("Detected broken controller after 5 failures to get status")
+                if (cast_failed_update_count >= max_cast_failed_updates):
+                    log_message("Detected broken controller after %d status failures" % (max_cast_failed_updates))
                     cast_device = None
                     cast_status = 'none'
                     cast_file = 'none'
                     cast_volume = 0
-                    failed_status_update_count = 0
+                    cast_failed_update_count = 0
                     continue
 
             cast_elapsed = int(cast_device.media_controller.status.current_time)
@@ -518,18 +552,19 @@ def mpd_agent():
                 cast_duration = 0
                 cast_progress = 0
 
-            elapsed_mins = int(cast_elapsed / 60)
-            elapsed_secs = cast_elapsed % 60
-            duration_mins = int(cast_duration / 60)
-            duration_secs = cast_duration % 60
+            cast_elapsed_mins = int(cast_elapsed / 60)
+            cast_elapsed_secs = cast_elapsed % 60
+            cast_duration_mins = int(cast_duration / 60)
+            cast_duration_secs = cast_duration % 60
+
             log_message("%s (%s) vol:%02d %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
                 cast_status,
                 cast_volume,
-                elapsed_mins,
-                elapsed_secs,
-                duration_mins,
-                duration_secs,
+                cast_elapsed_mins,
+                cast_elapsed_secs,
+                cast_duration_mins,
+                cast_duration_secs,
                 cast_progress))
 
 
@@ -560,11 +595,11 @@ def mpd_agent():
 
             # Kill off any current app
             if not cast_device.is_idle:
-                log_message("Killing current running app")
+                log_message("Killing current running cast app")
                 cast_device.quit_app()
 
             while not cast_device.is_idle:
-                log_message("Waiting for device to get ready..")
+                log_message("Waiting for cast device to get ready...")
                 time.sleep(1)
 
             # Cast state inits
@@ -577,22 +612,26 @@ def mpd_agent():
         # MPD -> Chromecast Events
         # Anything that is driven from detecting changes
         # on the MPD side and pushing to the Chromecast
+
+        # Nothing to do if we don't have a cast
+        # device handle
         if (not cast_device):
             continue
 
-        # Initial Cast protection
-        # In first 10 seconds after casting a file
-        # we keep MPD paused only unpausing 
-        # and re-seeking to cast_elapsed - 1 when the 
+        # Initial Cast protection for file streaming
+        # After an initial cast we pause MPD 
+        # only unpausing and re-seeking to 
+        # cast_elapsed - 1 when the 
         # chromecast is reporting elapsed time
-        if (not cast_confirmed and 
+        # Does not apply for radio streams
+        if (not cast_file.startswith('http') and 
+                not cast_confirmed and 
                 mpd_status == 'pause' and 
-                cast_status == 'play' and
-                not cast_file.startswith('http')):
-            if (cast_elapsed < 1):
-                log_message('Initial cast.. Waiting for chromecast elapsed time')
+                cast_status == 'play'):
+            if (cast_elapsed == 0):
+                log_message('Initial cast... Waiting for chromecast elapsed time')
             else:
-                log_message('Initial cast.. Unpausing mpd')
+                log_message('Initial cast... elapsed time detected.. Unpausing mpd')
                 # sync 1 second behind
                 mpd_client.seekcur(cast_elapsed - 1)
                 # play (pause 0)
@@ -686,27 +725,25 @@ def mpd_agent():
             # Pause and seek to start of track
             # only applies to local files
             if (not cast_file.startswith('http')):
-                log_message("Pausing MPD")
+                log_message("Pausing MPD (initial cast)")
                 mpd_client.pause(1)
                 mpd_client.seekcur(0)
                 cast_confirmed = False
 
+            # no more to do until next loop
             continue
     
 
         # Detect a skip on MPD and issue a seek request on the 
         # chromecast.
-        # This feature can mis-fire depending on when its checked and 
-        # what detail is present on the MPD status.
-        # So we check that the chromecast is actively playing (cast_elapsed > 0)
-        # Also check that there is a min of 3 seconds between the time the track was 
-        # cast and curent timestamp. This prevents issues where the MPD status 
-        # shows a new track but retains the old track elapsed time for 1-2 seconds
-        # Finally we ensure there is at least 10 seconds difference between the 
-        # two elapsed times to ensure it's not a false positive because of lag
-        if (mpd_status == 'play' and 
+        #
+        # Make sure the cast is confirmed and only perform the
+        # seek if there is a difference of min 10 seconds
+        # That prevents mis-fire if the two elapsed times are 
+        # just out of sync versus an actual mpd seek being performed
+        if (not cast_file.startswith('http') and 
+                mpd_status == 'play' and 
                 cast_status == 'play' and 
-                not cast_file.startswith('http') and 
                 cast_confirmed and
                 cast_elapsed > 0 and
                 abs(mpd_elapsed - cast_elapsed) >= 10):
@@ -721,12 +758,9 @@ def mpd_agent():
         # is at the same time or further on.
         # Radio streams ignored for this.
         # The value we then set on mpd is 1 second 
-        # behind the # chromecast elapsed time.
-        # We want mpd preferentially 1 second behind the 
-        # Chromecast to allow the chromecast complete the stream 
-        # before it reacts to a track change
-        if (mpd_status == 'play' and 
-                not cast_file.startswith('http') and
+        # behind the chromecast elapsed time.
+        if (not cast_file.startswith('http') and
+                mpd_status == 'play' and 
                 cast_elapsed > 0 and 
                 cast_elapsed % 10 == 0 and
                 (mpd_elapsed >= cast_elapsed or
@@ -794,9 +828,19 @@ while (1):
              dead_threads += 1
 
     if (dead_threads > 0):
-        log_message("Detected %d dead threads.. exiting" % (dead_threads))
+        log_message("Detected %d dead threads... exiting" % (dead_threads))
+        sys.exit(-1);
+
+    # MPD/Chromecast deadlock
+    # The MPD loop runs more or less on a 
+    # 1-second interval. It will delay and 
+    # potentially lock-up if either an MPD or pychromecast
+    # call goes bad. This will detect 60 seconds deadlock and exit
+    now = int(time.time())
+    if (gv_mpd_agent_timestamp > 0 and 
+            now - gv_mpd_agent_timestamp >= 60):
+        log_message("Detected deadlocked MPD agent... exiting")
         sys.exit(-1);
 
     time.sleep(5)
-
 
