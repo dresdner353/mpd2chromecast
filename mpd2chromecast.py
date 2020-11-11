@@ -581,6 +581,7 @@ def mpd_agent():
                 cast_device.quit_app()
                 cast_status = mpd_status
                 cast_device = None
+                cast_volume = 0
                 continue
 
         # Get cast device when in play state and 
