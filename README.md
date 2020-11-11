@@ -45,15 +45,23 @@ Switch chromecast device and you should experience playback stopping and transfe
 
 To start the agent in the background, use this command:
 ```
-./mpd2chromecast/mpd2chromecast.sh
+./mpd2chromecast/mpd2chromecast.sh start
 ```
 You can also force a restart of the agent using the "restart" option:
 ```
 ./mpd2chromecast/mpd2chromecast.sh restart
 ```
+..and also stop the script.. 
+```
+./mpd2chromecast/mpd2chromecast.sh stop
+```
+Lastly, you can use a keepalive mode that keeps the script running with a loop that will restart the python script within 5 seconds of exiting
+```
+./mpd2chromecast/mpd2chromecast.sh keepalive
+```
 
 ## Enabling the script to run at startup
-The shell script mentioned above is crontab friendly in that it can be invoked continually and will only start the agent if it's not found to be running. 
+The shell script mentioned above is crontab friendly in that it can be invoked continually and will only start the agent if it's not found to be running. Best advised to deploy this with the keepalive approach that will guarantee restarts within 5 seconds of crashing. 
 
 To setup crontab on the Pi:
 ```
@@ -66,10 +74,10 @@ crontab -e
     line from below...
 
     # for Volumio, home is /home/volumio 
-    * * * * * /home/volumio/mpd2chromecast/mpd2chromecast.sh > /dev/null
+    * * * * * /home/volumio/mpd2chromecast/mpd2chromecast.sh keepalive > /dev/null
 
     # for moOde, home is in /home/pi
-    * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh > /dev/null
+    * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh keepalive > /dev/null
 
 ```
 
