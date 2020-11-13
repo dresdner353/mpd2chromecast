@@ -59,9 +59,9 @@ echo "Detected home user:${HOME_USER}"
 
 
 # install packages
-apt-get update
-apt-get install python3-pip
-apt-get install cron
+apt-get -y update
+apt-get -y install python3-pip
+apt-get -y install cron
 pip3 install pychromecast cherrypy python-mpd2 mutagen
 
 # Enable cron
