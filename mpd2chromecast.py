@@ -26,7 +26,7 @@ def log_message(message):
 # Config inits
 gv_cfg_filename = ""
 gv_chromecast_name = ""
-gv_cast_port = 8080
+gv_cast_port = 8090
 gv_platform_variant = "Unknown"
 
 # Discovered Chromecasts dict

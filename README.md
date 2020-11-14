@@ -41,7 +41,7 @@ pip3, cron, pychromecast cherrypy python-mpd2 mutagen
 ## Web Interface
 ![Cast Control Web Interface](./cast_web_control.jpg)
 
-Browse to http://[your device ip]:8080/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
+Browse to http://[your device ip]:8090/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
 
 Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. Try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
 
@@ -53,7 +53,7 @@ The script runs four threads:
 This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
-This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8080 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide a simple control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
+This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide a simple control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
 
 * Config  
 This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
