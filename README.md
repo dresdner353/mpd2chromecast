@@ -6,6 +6,8 @@ The script uses an MPD client to monitor playback state of MPD, the underlying m
 
 As you invoke play, stop, pause, next/previous, seek actions & volume control on your media platform, these are detected by the MPD interface and then relayed to the Chromecast to match the behaviour. The script also provides album artwork support that will appear on screen for video-based chromecasts.
 
+**Note:** Does not work on the official Volumio Jesse-based images any longer. The Jesse release is over 5 years old and too old to keep up with various Python dependencies. It does work however on their beta images for Raspian Buster. So this limitation will go away once Volumio get official images released for Buster.
+
 ## Acknowledgements
 The script would not be possible without the dedicated hard work of others who wrote various modules that made my job a lot easier:
 
@@ -18,19 +20,23 @@ With this module, we are able to detect and control Chromecast-based devices on 
 * cherrypy (cherrypy.org)  
 All URL serving provided by this script is made possible by the cherrypy module. Python does come with it's own HTTP libraries for client and server but they can be quite complex when playing a web server role. Cherrypy provides a much more mature and reliable framework for providing a directory URL server needed for the media and albumart files.
 
-
 ## Installation
-For installation on Volumio, [see Volumio README](./volumio.md)  
-For installation on moOde, [see moOde README](./moOde.md)  
-
-## Test Run
-To get the script running on a terminal, just do the following:
+ssh into your user account:
 ```
-LC_ALL=en_US.UTF-8 ~/mpd2chromecast/mpd2chromecast.py 
+ssh volumio@volumio.local
+or 
+ssh pi@moode.local
 ```
-In this mode, the script will output data every second showing playback status for your media player and any related activity from the Chromecast. 
-
-Note: The use of LC_ALL set to US UTF-8 was something I was forced to do because when left on my default locale (Ireland UTF-8), something went wrong with how UTF-8 characters we being matched between filenames on the disk and the URLs. I suspect it relates to locale specifics not present within the Raspian image. Forcing US UTF-8 sorts this however.
+Then start the install process as follows (you will be prompted for the password for sudo):
+```
+curl -s https://raw.githubusercontent.com/dresdner353/mpd2chromecast/master/install.sh | sudo bash
+```
+This command will:
+* Install required packages..  
+pip3, cron, pychromecast cherrypy python-mpd2 mutagen
+* Enable cron (scheduler)  
+* Download mpd2chromecast  
+* Enable cronjob to auto-start mpd2chromecast  
 
 ## Web Interface
 ![Cast Control Web Interface](./cast_web_control.jpg)
@@ -40,46 +46,6 @@ Browse to http://[your device ip]:8080/cast and you will see a very simple web i
 Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. Try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
 
 Switch chromecast device and you should experience playback stopping and transferring to the new device. By setting the device to 'Disabled', you will disable the casting functionality.
-
-## Starting the Agent in the Background
-
-To start the agent in the background, use this command:
-```
-./mpd2chromecast/mpd2chromecast.sh start
-```
-You can also force a restart of the agent using the "restart" option:
-```
-./mpd2chromecast/mpd2chromecast.sh restart
-```
-..and also stop the script.. 
-```
-./mpd2chromecast/mpd2chromecast.sh stop
-```
-Lastly, you can use a keepalive mode that keeps the script running with a loop that will restart the python script within 5 seconds of exiting
-```
-./mpd2chromecast/mpd2chromecast.sh keepalive
-```
-
-## Enabling the script to run at startup
-The shell script mentioned above is crontab friendly in that it can be invoked continually and will only start the agent if it's not found to be running. Best advised to deploy this with the keepalive approach that will guarantee restarts within 5 seconds of crashing. 
-
-To setup crontab on the Pi:
-```
-sudo apt-get install cron
-sudo update-rc.d cron enable 2 3 4 5
-sudo /etc/init.d/cron start
-   
-crontab -e 
-    when prompted, select the desired editor and add the appropriate
-    line from below...
-
-    # for Volumio, home is /home/volumio 
-    * * * * * /home/volumio/mpd2chromecast/mpd2chromecast.sh keepalive > /dev/null
-
-    # for moOde, home is in /home/pi
-    * * * * * /home/pi/mpd2chromecast/mpd2chromecast.sh keepalive > /dev/null
-
-```
 
 ## How it works
 The script runs four threads:
