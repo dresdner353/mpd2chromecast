@@ -41,11 +41,17 @@ pip3, cron, pychromecast cherrypy python-mpd2 mutagen
 ## Web Interface
 ![Cast Control Web Interface](./cast_web_control.jpg)
 
-Browse to http://[your device ip]:8090/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and click the tick-box button and it will set that as the active cast device. You can also refresh the list using the reload button.
+Browse to http://[your device ip]:8090/cast and you will see a very simple web interface with a drop-down combo of all discovered chromecast devices. Select the desired device and it will set that as the active cast device. 
 
 Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. Try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly.
 
 Switch chromecast device and you should experience playback stopping and transferring to the new device. By setting the device to 'Disabled', you will disable the casting functionality.
+
+The web interface also allows you to select stored paylists (MPD playlists only) as well as select tracks from the current queue. You can also change volume, skip forward/backward on tracks and toggle the shuffe and repeat modes. It's incredibly bland as an interface but I wanted to extend the features a bit given the script is acting as an MPD client. It even shows albumart and the current playing title.
+
+It's built with Bootstrap and jquery and under normal running, updates its content each time you perform an action or every 10 seconds. The updating is suspended when the browser window/tab is not in focus.
+
+When using Volumio, be aware that the MPD queue will only show one track at a time as Volumio manages its own playlist outside of MPD. You can however use an MPD client to still create and manage playlists on your Volumio server and use this web client to select those playlists for playback.
 
 ## How it works
 The script runs four threads:
@@ -53,7 +59,7 @@ The script runs four threads:
 This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
-This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide a simple control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
+This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide the control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
 
 * Config  
 This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
