@@ -35,7 +35,8 @@ music_file_exts = [
         ]
 
 total_created = 0
-total_failures = 0
+total_extract_failures = 0
+total_write_failures = 0
 total_existing = 0
 total_dirs_scanned = 0
 
@@ -110,11 +111,15 @@ for root, dirs, files in os.walk(
                 print('Created %s' % (albumart_path))
             except:
                 print('Failed to create %s' % (albumart_path))
-                total_failures += 1
+                total_write_failures += 1
+        else:
+            total_extract_failures += 1
+            print('Failed to extract albumart in %s' % (root))
 
 
 print('\n\nComplete')
 print('Scanned %d directories' % (total_dirs_scanned))
 print('Created %d covers' % (total_created))
-print('Failed to create %d covers' % (total_failures))
+print('Failed to create %d covers' % (total_write_failures))
+print('Failed to exract albumart in %d directories' % (total_extract_failures))
 print('Found %d existing covers' % (total_existing))
