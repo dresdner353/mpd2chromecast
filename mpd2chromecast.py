@@ -41,6 +41,12 @@ gv_mpd_music_dir = '/var/lib/mpd/music'
 # Global MPD agent deadlock timestamp
 gv_mpd_agent_timestamp = 0
 
+# global handles on MPD client
+gv_mpd_client = None
+gv_mpd_client_status = None
+gv_mpd_client_song = None
+gv_mpd_playlists = None
+gv_mpd_queue = None
 
 def determine_platform_variant():
     # Determine the stream variant we have
@@ -168,46 +174,123 @@ def chromecast_agent():
 def build_cast_web_page():
     global gv_discovered_devices
     global gv_chromecast_name
+    global gv_mpd_client_status
+    global gv_mpd_client_song
+    global gv_mpd_playlists
+    global gv_mpd_queue
 
-    header_tmpl = """
-        <link rel='stylesheet' href='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css'>
-        <script src='https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js'></script>
-        <script src='https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.bundle.min.js'></script>
+    web_page_tmpl = """
+        <head>   
+        <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+        <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.bundle.min.js"></script>
         <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+          .material-icons.md-18 { font-size: 18px; }
+          .material-icons.md-24 { font-size: 24px; }
+          .material-icons.md-36 { font-size: 36px; }
+          .material-icons.md-48 { font-size: 48px; }
+
+        </style>
+        <title>__TITLE__</title>
 
         <script>
+            // enable tooltips
             $(function () {
                 $('[data-toggle="tooltip"]').tooltip()
             })
-        </script>
 
+        $(document).ready(function(){
+        __ACTION_FUNCTIONS__
+        });
+
+        // Window focus awareness
+        // for refresh page behaviour
+        var window_focus = true;
+
+        $(window).focus(function() {
+            window_focus = true;
+        }).blur(function() {
+            window_focus = false;
+        });
+
+        // refresh timer and function
+        // We use an interval refresh which will be called
+        // every __RELOAD__ msecs and will invoke a reload of 
+        // data into the dashboard div if the window is in focus
+        // If not, we will skip the reload.
+        // We also cancel the timer ahead of calling the reload to 
+        // avoid the reload stacking more timers on itself and 
+        // causing major issues
+        var refresh_timer = setInterval(refreshPage, __RELOAD__);
+        
+        function refreshPage() {
+            if (window_focus == true) {
+                $.get("__REFRESH_URL__", function(data, status){
+                    clearInterval(refresh_timer);
+                    $("#dashboard").html(data);
+                });
+            }
+        }
+
+        </script>
+        </head>   
+        <body>
+            <div id="dashboard">__DASHBOARD__</div>
+        </body>
     """
 
-    web_page_str = header_tmpl
+    click_get_reload_template = """
+        $("#__ID__").click(function(){
+            $.get('/cast?__ARG__=__VAL__', function(data, status) {
+                // clear refresh timer before reload
+                clearInterval(refresh_timer);
+                $("#dashboard").html(data);
+            });
+        });
 
-    # main container
-    web_page_str += (
+        $('#__ID__').on('click', function() {
+          // opened combo.. set refresh to a longer interval
+          clearInterval(refresh_timer);
+          refresh_timer = setInterval(refreshPage, 120000);
+        })
+    """
+
+    change_get_reload_template = """
+        $('#__ID__').on('change', function() {
+            $.get('/cast?__ID__=' + this.value, function(data, status) {
+                // clear refresh timer before reload
+                clearInterval(refresh_timer);
+                $("#dashboard").html(data);
+            });
+        });
+
+        $('#__ID__').on('click', function() {
+          // opened combo.. set refresh to a longer interval
+          clearInterval(refresh_timer);
+          refresh_timer = setInterval(refreshPage, 120000);
+        })
+    """
+
+
+    dashboard_str = ""
+    jquery_str = ""
+
+    # main container and card
+    dashboard_str += (
             '<div class="container-fluid">'
             '<div class="card">'
             '<div class="card-body">'
-            '<h5 class="card-title">Chromecast</h5>'
             ) 
 
-    # Google Cast SVG Icon
-    # https://developers.google.com/cast/docs/developers#icons
-    cast_icon_svg = (
-            ' <svg width="2em" height="2em" viewBox="0 0 24 24" class="bi bi-cast" fill="currentColor" xmlns="http://www.w3.org/2000/svg">' 
-            ' <path d="M1,18 L1,21 L4,21 C4,19.34 2.66,18 1,18 L1,18 Z M1,14 L1,16 C3.76,16 6,18.24 6,21 L8,21 C8,17.13 4.87,14 1,14 L1,14 Z M1,10 L1,12 C5.97,12 10,16.03 10,21 L12,21 C12,14.92 7.07,10 1,10 L1,10 Z M21,3 L3,3 C1.9,3 1,3.9 1,5 L1,8 L3,8 L3,5 L21,5 L21,19 L14,19 L14,21 L21,21 C22.1,21 23,20.1 23,19 L23,5 C23,3.9 22.1,3 21,3 L21,3 Z" id="cast" fill="#000000" sketch:type="MSShapeGroup"></path>'
-            ' </svg>'
-            )
-
-    # Chromecast combo box start
-    web_page_str += (
-            '<form action="/cast" method="post">'
+    dashboard_str += (
             '<div class="input-group mb-3">'
-            '%s &nbsp;'
-            '<select class="custom-select custom-select" name="chromecast">'
-            ) % (cast_icon_svg)
+            '<i class="material-icons md-36">%s</i>&nbsp;'
+            '<select class="custom-select custom-select" id="chromecast" name="chromecast">'
+            ) % (
+                    'cast_connected' if gv_chromecast_name != 'Disabled' else 'cast'
+                    )
 
     # Construct a sorted list of discovered device names
     # and put 'Disabled' at the top
@@ -219,34 +302,250 @@ def build_cast_web_page():
             selected_str = 'selected'
         else:
             selected_str = ''
-        web_page_str += (
-                '     <option value="%s" %s>%s</option>' % (
+        dashboard_str += (
+                '<option value="%s" %s>%s</option>' % (
                     device, 
                     selected_str, 
                     device)
                 )
 
-    # Chromecast combo box end with apply button
-    # and refresh button below
-    web_page_str += (
+    # Chromecast combo box end
+    dashboard_str += (
             '</select>'
-            '<button type="submit" class="btn btn-primary btn" '
-            'data-toggle="tooltip" data-placement="top" title="Cast to selected device" '
-            '>&#x2713;</button>'
-            '&nbsp;'
-            '<a class="btn btn-primary btn" '
-            'data-toggle="tooltip" data-placement="top" title="Refresh Device List" '
-            'href="/cast" role="button">&#x21bb;</a>'
             '</div>'
-            '</form>'
             )
 
-    # main container
-    web_page_str += (
+    # action code for selecting a device
+    action_str = change_get_reload_template
+    action_str = action_str.replace('__ID__', 'chromecast')
+    jquery_str += action_str
+
+    # Playlists
+    if (gv_mpd_playlists and
+            len(gv_mpd_playlists) > 0):
+
+        dashboard_str += (
+                '<div class="input-group mb-3">'
+                '<i class="material-icons md-36">playlist_play</i>&nbsp;'
+                '<select class="custom-select custom-select" id="playlist" name="playlist">'
+                ) 
+
+        # Construct a list of playlists
+        dashboard_str += (
+                '     <option value="None">Select Playlist</option>' 
+                )
+        for item in gv_mpd_playlists:
+            dashboard_str += (
+                    '     <option value="%s">%s</option>' % (
+                        item['playlist'], 
+                        item['playlist'])
+                    )
+
+        # playlist combo box end 
+        dashboard_str += (
+                '</select>'
+                '</div>'
+                )
+
+        # action code for selecting a playlist
+        action_str = change_get_reload_template
+        action_str = action_str.replace('__ID__', 'playlist')
+        jquery_str += action_str
+
+    # Queue (current playlist)
+    if (gv_mpd_queue and
+            len(gv_mpd_queue) > 0):
+
+        dashboard_str += (
+                '<div class="input-group mb-3">'
+                '<i class="material-icons md-36">queue_music</i>&nbsp;'
+                '<select class="custom-select custom-select" id="song" name="song">'
+                ) 
+
+        # Construct a list of songs
+        dashboard_str += (
+                '<option value="None">Select Track</option>' 
+                )
+        i = -1
+        for item in gv_mpd_queue:
+            i += 1
+            if 'artist' in item and 'title' in item:
+                queue_title = '%s - %s' % (
+                        item['artist'],
+                        item['title'])
+            elif 'name' in item:
+                queue_title = '%s' % (
+                        item['name'])
+            else:
+                queue_title = 'Unknown'
+
+            dashboard_str += (
+                    '<option value="%d">%s</option>' % (
+                        i,
+                        queue_title,
+                        )
+                    )
+
+        # playlist combo box end 
+        dashboard_str += (
+                '</select>'
+                '</div>'
+                )
+
+        # action code for selecting a track from queue
+        action_str = change_get_reload_template
+        action_str = action_str.replace('__ID__', 'song')
+        jquery_str += action_str    
+
+    # MPD Playback
+    if gv_mpd_client_status:
+        # material icon.. play by default and pause if playing
+        playback_icon_ref = 'play_circle_filled'
+        if (gv_mpd_client_status and 
+                gv_mpd_client_status['state'] == 'play'):
+            playback_icon_ref = 'pause_circle_filled'
+
+        # MPD Volume
+        mpd_volume = int(gv_mpd_client_status['volume'])
+        mpd_random = int(gv_mpd_client_status['random'])
+        mpd_repeat = int(gv_mpd_client_status['repeat'])
+
+        dashboard_str += (
+                '<div class="input-group mb-3">'
+                '<button id="prev" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">skip_previous</i></button>'
+                '&nbsp;'
+                '<button id="prev30" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">replay_30</i></button>'
+                '&nbsp;'
+                '<button id="play" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">%s</i></button>'
+                '&nbsp;'
+                '<button id="next30" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">forward_30</i></button>'
+                '&nbsp;'
+                '<button id="next" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">skip_next</i></button>'
+                '</div>'
+                '<div class="input-group mb-3">'
+                '<button id="shuffle" type="button" class="btn btn-%s">'
+                '<i class="material-icons md-36">shuffle</i></button>'
+                '&nbsp;'
+                '<button id="repeat" type="button" class="btn btn-%s">'
+                '<i class="material-icons md-36s">repeat</i></button>'
+                '&nbsp;'
+                '<button id="voldown" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">volume_down</i></button>'
+                '&nbsp;'
+                '<button id="volume" type="button" class="btn btn-primary">'
+                '%02d</button>'
+                '&nbsp;'
+                '<button id="volup" type="button" class="btn btn-primary">'
+                '<i class="material-icons md-36">volume_up</i></button>'
+                '</div>'
+                ) % (
+                        playback_icon_ref,
+                        'primary' if mpd_random else 'secondary',
+                        'primary' if mpd_repeat else 'secondary',
+                        mpd_volume,
+                        )
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'prev')
+        action_str = action_str.replace('__ARG__', 'playback')
+        action_str = action_str.replace('__VAL__', 'prev')
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'prev30')
+        action_str = action_str.replace('__ARG__', 'seek')
+        action_str = action_str.replace('__VAL__', '-30')
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'play')
+        action_str = action_str.replace('__ARG__', 'playback')
+        action_str = action_str.replace('__VAL__', 'play')
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'next30')
+        action_str = action_str.replace('__ARG__', 'seek')
+        action_str = action_str.replace('__VAL__', '%2b30')
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'next')
+        action_str = action_str.replace('__ARG__', 'playback')
+        action_str = action_str.replace('__VAL__', 'next')
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'voldown')
+        action_str = action_str.replace('__ARG__', 'volume')
+        action_str = action_str.replace('__VAL__', str(mpd_volume - 5))
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'volup')
+        action_str = action_str.replace('__ARG__', 'volume')
+        action_str = action_str.replace('__VAL__', str(mpd_volume + 5))
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'shuffle')
+        action_str = action_str.replace('__ARG__', 'shuffle')
+        action_str = action_str.replace('__VAL__', str((mpd_random + 1) % 2))
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'repeat')
+        action_str = action_str.replace('__ARG__', 'repeat')
+        action_str = action_str.replace('__VAL__', str((mpd_repeat + 1) % 2))
+        jquery_str += action_str
+
+        # Albumart and curent track details
+        if (gv_mpd_client_song and 
+                'file' in gv_mpd_client_song):
+            albumart_url = get_albumart_url(gv_mpd_client_song['file'])
+            if albumart_url:
+                dashboard_str += (
+                        '<img class="card-img-top" src="%s" alt="album art">'
+                        '<br>'
+                        '<br>'
+                        '<center>'
+                        '<h4 class="card-title">%s</h4>'
+                        '<h5 class="card-subitle mb-2 text-muted">%s - %s</h5>'
+                        '</center>'
+                        ) % (
+                                albumart_url,
+                                gv_mpd_client_song['title'],
+                                gv_mpd_client_song['artist'],
+                                gv_mpd_client_song['album'],
+                                )
+    else:
+        # no status
+        # just report something
+        dashboard_str += (
+                '<br>'
+                '<center>'
+                '<h4 class="card-title">Updating...</h4>'
+                '</center>'
+                ) 
+
+    # Close outer dv
+    dashboard_str += (
             '</div>'
             '</div>'
             '</div>'
             )
+
+    web_page_str = web_page_tmpl
+    web_page_str = web_page_str.replace("__TITLE__", "mpd2chromecast Control Panel")
+    web_page_str = web_page_str.replace("__ACTION_FUNCTIONS__", jquery_str)
+    web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
+    web_page_str = web_page_str.replace("__REFRESH_URL__", "/cast")
+    web_page_str = web_page_str.replace("__RELOAD__", "10000")
 
     return web_page_str
 
@@ -259,16 +558,27 @@ class stream_handler(object):
 class cast_handler(object):
     @cherrypy.expose()
 
-    def index(self, chromecast = None):
-        global gv_chromecast_name
+    def index(
+            self, 
+            chromecast = None, 
+            playback = None, 
+            seek = None, 
+            volume = None, 
+            playlist = None, 
+            song = None,
+            shuffle = None,
+            repeat = None):
 
-        log_message("device client:%s:%d params:%s" % (
+        global gv_chromecast_name
+        global gv_mpd_client
+        global gv_mpd_client_status
+
+        log_message("/cast API %s params:%s" % (
             cherrypy.request.remote.ip,
-            cherrypy.request.remote.port,
             cherrypy.request.params))
 
         if chromecast:
-            log_message('Changing target chromecast to %s' % (
+            log_message('/cast chromecast -> %s' % (
                 chromecast))
 
             # Make change instantly
@@ -281,6 +591,74 @@ class cast_handler(object):
             json_cfg['chromecast'] = chromecast
             cfg_file.write('%s\n' % (json.dumps(json_cfg)))
             cfg_file.close()
+
+        if playback:
+            log_message('/cast playback %s' % (
+                playback))
+            if gv_mpd_client:
+                if playback == 'prev':
+                    gv_mpd_client.previous()
+                elif playback == 'next':
+                    gv_mpd_client.next()
+                elif playback == 'play':
+                    # doubles as play/pause toggle
+                    gv_mpd_client.pause()
+
+                    # best effort sly toggle on state
+                    # ro get returned web content updated
+                    if gv_mpd_client_status:
+                        if gv_mpd_client_status['state'] == 'play':
+                            gv_mpd_client_status['state'] = 'pause'
+                        else:
+                            gv_mpd_client_status['state'] = 'play'
+
+        if seek:
+            log_message('/cast seek %s' % (
+                seek))
+            if gv_mpd_client:
+                gv_mpd_client.seekcur(seek)
+
+
+        if volume:
+            log_message('/cast volume %s' % (
+                volume))
+            if gv_mpd_client:
+                gv_mpd_client.setvol(volume)
+
+                if gv_mpd_client_status:
+                    gv_mpd_client_status['volume'] = volume
+
+        if playlist:
+            log_message('/cast playlist %s' % (
+                playlist))
+            if gv_mpd_client:
+                gv_mpd_client.clear()
+                gv_mpd_client.load(playlist)
+                gv_mpd_client.play(0)
+
+        if song:
+            log_message('/cast song %s' % (
+                playlist))
+            if gv_mpd_client:
+                gv_mpd_client.play(int(song))
+
+        if shuffle:
+            log_message('/cast shuffle %s' % (
+                shuffle))
+            if gv_mpd_client:
+                gv_mpd_client.random(int(shuffle))
+
+                if gv_mpd_client_status:
+                    gv_mpd_client_status['random'] = shuffle
+
+        if repeat:
+            log_message('/cast repeat %s' % (
+                repeat))
+            if gv_mpd_client:
+                gv_mpd_client.repeat(int(repeat))
+
+                if gv_mpd_client_status:
+                    gv_mpd_client_status['repeat'] = repeat
 
         return build_cast_web_page()
 
@@ -394,11 +772,16 @@ def mpd_agent():
     global gv_chromecast_name
     global gv_verbose
     global gv_mpd_agent_timestamp
+    global gv_mpd_client
+    global gv_mpd_client_status
+    global gv_mpd_client_song
+    global gv_mpd_playlists
+    global gv_mpd_queue
 
     now = int(time.time())
 
     # MPD inits
-    mpd_client = None
+    gv_mpd_client = None
     mpd_last_status = now
 
     # Cast state inits
@@ -414,6 +797,7 @@ def mpd_agent():
     while (1):
         # 1 sec delay per iteration
         time.sleep(1)
+
         print() # log output separator
         now = int(time.time())
 
@@ -426,65 +810,79 @@ def mpd_agent():
             log_message("No MPD contact in 60 seconds... exiting")
             return
 
-        if not mpd_client:
+        if not gv_mpd_client:
             log_message('Connecting to MPD...')
             try:
-                mpd_client = mpd.MPDClient()
-                mpd_client.connect("localhost", 6600)
+                gv_mpd_client = mpd.MPDClient()
+                gv_mpd_client.connect("localhost", 6600)
             except:
                 log_message('Problem getting mpd client')
-                mpd_client = None
+                gv_mpd_client = None
                 continue
 
         # Get current MPD status details
         try:
-            mpd_client_status = mpd_client.status()
-            mpd_client_song = mpd_client.currentsong()
+            gv_mpd_client_status = gv_mpd_client.status()
+            gv_mpd_client_song = gv_mpd_client.currentsong()
+            gv_mpd_playlists = gv_mpd_client.listplaylists()
+            gv_mpd_queue = gv_mpd_client.playlistinfo()
             if gv_verbose:
                 log_message('MPD Status:\n%s' % (
                     json.dumps(
-                        mpd_client_status, 
+                        gv_mpd_client_status, 
                         indent = 4)))
                 log_message('MPD Current Song:\n%s' % (
                     json.dumps(
-                        mpd_client_song, 
+                        gv_mpd_client_song, 
                         indent = 4)))
             mpd_last_status = now
+
         except:
             # reset... and let next loop reconect
             log_message('Problem getting mpd status')
-            mpd_client = None
+            gv_mpd_client = None
+            gv_mpd_client_status = None
+            gv_mpd_client_song = None
+            gv_mpd_playlists = None
+            gv_mpd_queue = None
+            continue
+
+        # sanity check on status
+        # as it can compe back empty
+        if len(gv_mpd_client_status) == 0:
+            log_message('Problem getting mpd status')
             continue
 
         # Start with the current playing/selected file
-        mpd_file = 'none'
-        if ('file' in mpd_client_song and 
-                mpd_client_song['file']):
-            mpd_file = mpd_client_song['file']
+        mpd_file = None
+        if ('file' in gv_mpd_client_song and 
+                gv_mpd_client_song['file']):
+            mpd_file = gv_mpd_client_song['file']
 
         # mandatory fields
-        mpd_status = mpd_client_status['state']
-        mpd_volume = int(mpd_client_status['volume'])
+        mpd_status = gv_mpd_client_status['state']
+        mpd_volume = int(gv_mpd_client_status['volume'])
+        mpd_repeat = int(gv_mpd_client_status['repeat'])
+        mpd_random = int(gv_mpd_client_status['random'])
 
         # optionals (will depend on given state and stream vs file
         mpd_elapsed = 0
         mpd_duration = 0
 
-        if 'elapsed' in mpd_client_status:
-            mpd_elapsed = int(float(mpd_client_status['elapsed']))
-        if 'duration' in mpd_client_status:
-            mpd_duration = int(float(mpd_client_status['duration']))
-
+        if 'elapsed' in gv_mpd_client_status:
+            mpd_elapsed = int(float(gv_mpd_client_status['elapsed']))
+        if 'duration' in gv_mpd_client_status:
+            mpd_duration = int(float(gv_mpd_client_status['duration']))
 
         artist = ''
         album = ''
         title = ''
-        if 'artist' in mpd_client_song:
-            artist = mpd_client_song['artist']
-        if 'album' in mpd_client_song:
-            album = mpd_client_song['album']
-        if 'title' in mpd_client_song:
-            title = mpd_client_song['title']
+        if 'artist' in gv_mpd_client_song:
+            artist = gv_mpd_client_song['artist']
+        if 'album' in gv_mpd_client_song:
+            album = gv_mpd_client_song['album']
+        if 'title' in gv_mpd_client_song:
+            title = gv_mpd_client_song['title']
 
         # MPD Elapsed time and progress
         mpd_elapsed_mins = int(mpd_elapsed / 60)
@@ -511,7 +909,11 @@ def mpd_agent():
             mpd_progress))
 
         # Chromecast URL for media
-        cast_url, cast_file_type = mpd_file_to_url(mpd_file)
+        if mpd_file:
+            cast_url, cast_file_type = mpd_file_to_url(mpd_file)
+        else:
+            # no file, nothing more to do
+            continue
 
         # Chromecast Status
         if (cast_device):
@@ -634,53 +1036,13 @@ def mpd_agent():
             else:
                 log_message('Initial cast... elapsed time detected.. Unpausing mpd')
                 # sync 1 second behind
-                mpd_client.seekcur(cast_elapsed - 1)
+                gv_mpd_client.seekcur(cast_elapsed - 1)
                 # play (pause 0)
-                mpd_client.pause(0)
+                gv_mpd_client.pause(0)
                 cast_confirmed = True
             continue
 
-
-        # Volume change only while playing
-        if (cast_status == 'play' and 
-                cast_volume != mpd_volume):
-
-            log_message("Setting Chromecast Volume: %d" % (mpd_volume))
-            # Chromecast volume is 0.0 - 1.0 (divide by 100)
-            cast_device.set_volume(mpd_volume / 100)
-            cast_volume = mpd_volume
-            continue
-
-        # Pause
-        if (cast_status != 'pause' and
-            mpd_status == 'pause'):
-
-            log_message("Pausing Chromecast")
-            cast_device.media_controller.pause()
-            cast_status = mpd_status
-            continue
-        
-        # Resume play
-        if (cast_status == 'pause' and 
-            mpd_status == 'play'):
-
-            log_message("Unpause Chromecast")
-            cast_device.media_controller.play()
-            cast_status = mpd_status
-            continue
-        
-        # Stop
-        if (cast_status != 'stop' and 
-            mpd_status == 'stop'):
-
-            log_message("Stop Chromecast")
-            cast_device.media_controller.stop()
-            cast_status = mpd_status
-            cast_device = None
-            cast_volume = 0
-            continue
-
-        # Play a song or stream or next in playlist
+        # Play a song/stream or next in playlist
         if ((cast_status != 'play' and
             mpd_status == 'play') or
             (mpd_status == 'play' and mpd_file != cast_file)):
@@ -727,13 +1089,51 @@ def mpd_agent():
             # only applies to local files
             if (not cast_file.startswith('http')):
                 log_message("Pausing MPD (initial cast)")
-                mpd_client.pause(1)
-                mpd_client.seekcur(0)
+                gv_mpd_client.pause(1)
+                gv_mpd_client.seekcur(0)
                 cast_confirmed = False
 
             # no more to do until next loop
             continue
-    
+  
+        # Volume change only while playing
+        if (cast_status == 'play' and 
+                cast_volume != mpd_volume):
+
+            log_message("Setting Chromecast Volume: %d" % (mpd_volume))
+            # Chromecast volume is 0.0 - 1.0 (divide by 100)
+            cast_device.set_volume(mpd_volume / 100)
+            cast_volume = mpd_volume
+            continue
+
+        # Pause
+        if (cast_status != 'pause' and
+            mpd_status == 'pause'):
+
+            log_message("Pausing Chromecast")
+            cast_device.media_controller.pause()
+            cast_status = mpd_status
+            continue
+        
+        # Resume play
+        if (cast_status == 'pause' and 
+            mpd_status == 'play'):
+
+            log_message("Unpause Chromecast")
+            cast_device.media_controller.play()
+            cast_status = mpd_status
+            continue
+        
+        # Stop
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop'):
+
+            log_message("Stop Chromecast")
+            cast_device.media_controller.stop()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
 
         # Detect a skip on MPD and issue a seek request on the 
         # chromecast.
@@ -771,7 +1171,7 @@ def mpd_agent():
                             cast_elapsed))
 
                 # Value for seek is 1 second behind
-                mpd_client.seekcur(cast_elapsed - 1)
+                gv_mpd_client.seekcur(cast_elapsed - 1)
 
 # main
 
