@@ -171,13 +171,16 @@ def chromecast_agent():
     return 
 
 
-def build_cast_web_page():
+def build_cast_web_page(refresh_interval = 10000):
     global gv_discovered_devices
     global gv_chromecast_name
     global gv_mpd_client_status
     global gv_mpd_client_song
     global gv_mpd_playlists
     global gv_mpd_queue
+
+    log_message('Building /cast webpage with refresh of %d msecs' % (
+            refresh_interval))
 
     web_page_tmpl = """
         <head>   
@@ -370,8 +373,12 @@ def build_cast_web_page():
         for item in gv_mpd_queue:
             i += 1
             if 'artist' in item and 'title' in item:
+                if type(item['artist']) == list:
+                    artist = item['artist'][0]
+                else:
+                    artist = item['artist']
                 queue_title = '%s - %s' % (
-                        item['artist'],
+                        artist,
                         item['title'])
             elif 'name' in item:
                 queue_title = '%s' % (
@@ -480,16 +487,26 @@ def build_cast_web_page():
         action_str = action_str.replace('__VAL__', 'next')
         jquery_str += action_str
 
+        if mpd_volume < 100:
+            next_higher_volume = mpd_volume + 1
+        else:
+            next_higher_volume = 100
+
+        if mpd_volume > 0:
+            next_lower_volume = mpd_volume - 1
+        else:
+            next_lower_volume = 0
+
         action_str = click_get_reload_template
         action_str = action_str.replace('__ID__', 'voldown')
         action_str = action_str.replace('__ARG__', 'volume')
-        action_str = action_str.replace('__VAL__', str(mpd_volume - 5))
+        action_str = action_str.replace('__VAL__', str(next_lower_volume))
         jquery_str += action_str
 
         action_str = click_get_reload_template
         action_str = action_str.replace('__ID__', 'volup')
         action_str = action_str.replace('__ARG__', 'volume')
-        action_str = action_str.replace('__VAL__', str(mpd_volume + 5))
+        action_str = action_str.replace('__VAL__', str(next_higher_volume))
         jquery_str += action_str
 
         action_str = click_get_reload_template
@@ -509,18 +526,22 @@ def build_cast_web_page():
                 'file' in gv_mpd_client_song):
             albumart_url = get_albumart_url(gv_mpd_client_song['file'])
             if albumart_url:
+                if type(gv_mpd_client_song['artist']) == list:
+                    artist = gv_mpd_client_song['artist'][0]
+                else:
+                    artist = gv_mpd_client_song['artist']
                 dashboard_str += (
                         '<img class="card-img-top" src="%s" alt="album art">'
-                        '<br>'
-                        '<br>'
+                        '<p>'
                         '<center>'
-                        '<h4 class="card-title">%s</h4>'
-                        '<h5 class="card-subitle mb-2 text-muted">%s - %s</h5>'
+                        '<h5 class="card-title">%s</h5>'
+                        '<h6 class="card-subitle mb-2 text-muted">%s - %s</h6>'
                         '</center>'
+                        '</p>'
                         ) % (
                                 albumart_url,
                                 gv_mpd_client_song['title'],
-                                gv_mpd_client_song['artist'],
+                                artist,
                                 gv_mpd_client_song['album'],
                                 )
     else:
@@ -540,12 +561,14 @@ def build_cast_web_page():
             '</div>'
             )
 
+    # Final web page construction
+    # refresh timer based on arg passed in to the function
     web_page_str = web_page_tmpl
     web_page_str = web_page_str.replace("__TITLE__", "mpd2chromecast Control Panel")
     web_page_str = web_page_str.replace("__ACTION_FUNCTIONS__", jquery_str)
     web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
     web_page_str = web_page_str.replace("__REFRESH_URL__", "/cast")
-    web_page_str = web_page_str.replace("__RELOAD__", "10000")
+    web_page_str = web_page_str.replace("__RELOAD__", str(refresh_interval))
 
     return web_page_str
 
@@ -576,6 +599,13 @@ class cast_handler(object):
         log_message("/cast API %s params:%s" % (
             cherrypy.request.remote.ip,
             cherrypy.request.params))
+
+        # refresh defaults to 10k msecs
+        # but refreshes at 3 seconds if an action is present
+        if len(cherrypy.request.params) > 0:
+            refresh_interval = 3000
+        else:
+            refresh_interval = 10000
 
         if chromecast:
             log_message('/cast chromecast -> %s' % (
@@ -660,7 +690,7 @@ class cast_handler(object):
                 if gv_mpd_client_status:
                     gv_mpd_client_status['repeat'] = repeat
 
-        return build_cast_web_page()
+        return build_cast_web_page(refresh_interval)
 
     # Force trailling slash off on called URL
     index._cp_config = {'tools.trailing_slash.on': False}
@@ -879,6 +909,9 @@ def mpd_agent():
         title = ''
         if 'artist' in gv_mpd_client_song:
             artist = gv_mpd_client_song['artist']
+            # Take first artist if is a list
+            if type(artist) == list:
+                artist = artist[0]
         if 'album' in gv_mpd_client_song:
             album = gv_mpd_client_song['album']
         if 'title' in gv_mpd_client_song:
@@ -1042,6 +1075,51 @@ def mpd_agent():
                 cast_confirmed = True
             continue
 
+        # Volume change only while playing
+        if (cast_status == 'play' and 
+                cast_volume != mpd_volume):
+
+            log_message("Setting Chromecast Volume: %d" % (mpd_volume))
+            # Chromecast volume is 0.0 - 1.0 (divide by 100)
+            cast_device.set_volume(mpd_volume / 100)
+            cast_volume = mpd_volume
+            continue
+
+        # Pause
+        if (cast_status != 'pause' and
+            mpd_status == 'pause'):
+
+            log_message("Pausing Chromecast")
+            cast_device.media_controller.pause()
+            cast_status = mpd_status
+            continue
+        
+        # Resume play
+        # but only if the track is the same
+        # needed to protect a scenario where we pause
+        # and then chane track
+        # prevents a brief unpause of play before the sudden
+        # change
+        if (mpd_file == cast_file and
+                cast_status == 'pause' and 
+            mpd_status == 'play'):
+
+            log_message("Unpause Chromecast")
+            cast_device.media_controller.play()
+            cast_status = mpd_status
+            continue
+        
+        # Stop
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop'):
+
+            log_message("Stop Chromecast")
+            cast_device.media_controller.stop()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
+
         # Play a song/stream or next in playlist
         if ((cast_status != 'play' and
             mpd_status == 'play') or
@@ -1096,44 +1174,6 @@ def mpd_agent():
             # no more to do until next loop
             continue
   
-        # Volume change only while playing
-        if (cast_status == 'play' and 
-                cast_volume != mpd_volume):
-
-            log_message("Setting Chromecast Volume: %d" % (mpd_volume))
-            # Chromecast volume is 0.0 - 1.0 (divide by 100)
-            cast_device.set_volume(mpd_volume / 100)
-            cast_volume = mpd_volume
-            continue
-
-        # Pause
-        if (cast_status != 'pause' and
-            mpd_status == 'pause'):
-
-            log_message("Pausing Chromecast")
-            cast_device.media_controller.pause()
-            cast_status = mpd_status
-            continue
-        
-        # Resume play
-        if (cast_status == 'pause' and 
-            mpd_status == 'play'):
-
-            log_message("Unpause Chromecast")
-            cast_device.media_controller.play()
-            cast_status = mpd_status
-            continue
-        
-        # Stop
-        if (cast_status != 'stop' and 
-            mpd_status == 'stop'):
-
-            log_message("Stop Chromecast")
-            cast_device.media_controller.stop()
-            cast_status = mpd_status
-            cast_device = None
-            cast_volume = 0
-            continue  
 
         # Detect a skip on MPD and issue a seek request on the 
         # chromecast.
