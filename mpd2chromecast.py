@@ -595,6 +595,8 @@ class cast_handler(object):
         global gv_chromecast_name
         global gv_mpd_client
         global gv_mpd_client_status
+        global gv_mpd_playlists
+        global gv_mpd_queue
 
         log_message("/cast API %s params:%s" % (
             cherrypy.request.remote.ip,
@@ -665,6 +667,8 @@ class cast_handler(object):
                 gv_mpd_client.clear()
                 gv_mpd_client.load(playlist)
                 gv_mpd_client.play(0)
+                # force queue reload in mpd_agent()
+                gv_mpd_queue = None 
 
         if song:
             log_message('/cast song %s' % (
@@ -823,8 +827,12 @@ def mpd_agent():
     cast_confirmed = False
     cast_failed_update_count = 0
     cast_last_status = now
+
+    loop_count = -1
     
     while (1):
+        loop_count += 1
+
         # 1 sec delay per iteration
         time.sleep(1)
 
@@ -854,8 +862,15 @@ def mpd_agent():
         try:
             gv_mpd_client_status = gv_mpd_client.status()
             gv_mpd_client_song = gv_mpd_client.currentsong()
-            gv_mpd_playlists = gv_mpd_client.listplaylists()
-            gv_mpd_queue = gv_mpd_client.playlistinfo()
+
+            # Only extract playlists and queue once every 
+            # 30 secnds or when forced by a playlist change
+            # it's too much of a strain to do this every second
+            if loop_count % 30 == 0 or gv_mpd_queue is None:
+                log_message('Loading playlists and queue')
+                gv_mpd_playlists = gv_mpd_client.listplaylists()
+                gv_mpd_queue = gv_mpd_client.playlistinfo()
+
             if gv_verbose:
                 log_message('MPD Status:\n%s' % (
                     json.dumps(
