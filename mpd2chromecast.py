@@ -199,10 +199,6 @@ def build_cast_web_page(refresh_interval = 10000):
         <title>__TITLE__</title>
 
         <script>
-            // enable tooltips
-            $(function () {
-                $('[data-toggle="tooltip"]').tooltip()
-            })
 
         $(document).ready(function(){
         __ACTION_FUNCTIONS__
@@ -244,6 +240,7 @@ def build_cast_web_page(refresh_interval = 10000):
         </body>
     """
 
+    # action code for buttons
     click_get_reload_template = """
         $("#__ID__").click(function(){
             $.get('/cast?__ARG__=__VAL__', function(data, status) {
@@ -253,13 +250,11 @@ def build_cast_web_page(refresh_interval = 10000):
             });
         });
 
-        $('#__ID__').on('click', function() {
-          // opened combo.. set refresh to a longer interval
-          clearInterval(refresh_timer);
-          refresh_timer = setInterval(refreshPage, 120000);
-        })
     """
 
+    # action code for combos
+    # click function resets refresh timer to 
+    # 2 minutes
     change_get_reload_template = """
         $('#__ID__').on('change', function() {
             $.get('/cast?__ID__=' + this.value, function(data, status) {
@@ -274,6 +269,7 @@ def build_cast_web_page(refresh_interval = 10000):
           clearInterval(refresh_timer);
           refresh_timer = setInterval(refreshPage, 120000);
         })
+
     """
 
 
@@ -359,6 +355,12 @@ def build_cast_web_page(refresh_interval = 10000):
     if (gv_mpd_queue and
             len(gv_mpd_queue) > 0):
 
+        if (gv_mpd_client_song and 
+                'id' in gv_mpd_client_song):
+            current_id = gv_mpd_client_song['id']
+        else:
+            current_id = "none" 
+
         dashboard_str += (
                 '<div class="input-group mb-3">'
                 '<i class="material-icons md-36">queue_music</i>&nbsp;'
@@ -369,9 +371,10 @@ def build_cast_web_page(refresh_interval = 10000):
         dashboard_str += (
                 '<option value="None">Select Track</option>' 
                 )
-        i = -1
+
+        # Each item named by artist - title or just name and 
+        # and the selection value is the songid field
         for item in gv_mpd_queue:
-            i += 1
             if 'artist' in item and 'title' in item:
                 if type(item['artist']) == list:
                     artist = item['artist'][0]
@@ -387,8 +390,9 @@ def build_cast_web_page(refresh_interval = 10000):
                 queue_title = 'Unknown'
 
             dashboard_str += (
-                    '<option value="%d">%s</option>' % (
-                        i,
+                    '<option value="%d" %s>%s</option>' % (
+                        int(item['id']),
+                        'selected' if item['id'] == current_id else '',
                         queue_title,
                         )
                     )
@@ -416,6 +420,7 @@ def build_cast_web_page(refresh_interval = 10000):
         mpd_volume = int(gv_mpd_client_status['volume'])
         mpd_random = int(gv_mpd_client_status['random'])
         mpd_repeat = int(gv_mpd_client_status['repeat'])
+        mpd_consume = int(gv_mpd_client_status['consume'])
 
         dashboard_str += (
                 '<div class="input-group mb-3">'
@@ -441,11 +446,11 @@ def build_cast_web_page(refresh_interval = 10000):
                 '<button id="repeat" type="button" class="btn btn-%s">'
                 '<i class="material-icons md-36s">repeat</i></button>'
                 '&nbsp;'
+                '<button id="consume" type="button" class="btn btn-%s">'
+                '<i class="material-icons md-36s">remove_from_queue</i></button>'
+                '&nbsp;'
                 '<button id="voldown" type="button" class="btn btn-primary">'
                 '<i class="material-icons md-36">volume_down</i></button>'
-                '&nbsp;'
-                '<button id="volume" type="button" class="btn btn-primary">'
-                '%02d</button>'
                 '&nbsp;'
                 '<button id="volup" type="button" class="btn btn-primary">'
                 '<i class="material-icons md-36">volume_up</i></button>'
@@ -454,7 +459,7 @@ def build_cast_web_page(refresh_interval = 10000):
                         playback_icon_ref,
                         'primary' if mpd_random else 'secondary',
                         'primary' if mpd_repeat else 'secondary',
-                        mpd_volume,
+                        'primary' if mpd_consume else 'secondary',
                         )
 
         action_str = click_get_reload_template
@@ -519,6 +524,12 @@ def build_cast_web_page(refresh_interval = 10000):
         action_str = action_str.replace('__ID__', 'repeat')
         action_str = action_str.replace('__ARG__', 'repeat')
         action_str = action_str.replace('__VAL__', str((mpd_repeat + 1) % 2))
+        jquery_str += action_str
+
+        action_str = click_get_reload_template
+        action_str = action_str.replace('__ID__', 'consume')
+        action_str = action_str.replace('__ARG__', 'consume')
+        action_str = action_str.replace('__VAL__', str((mpd_consume + 1) % 2))
         jquery_str += action_str
 
         # Albumart and curent track details
@@ -590,11 +601,13 @@ class cast_handler(object):
             playlist = None, 
             song = None,
             shuffle = None,
-            repeat = None):
+            repeat = None,
+            consume = None):
 
         global gv_chromecast_name
         global gv_mpd_client
         global gv_mpd_client_status
+        global gv_mpd_client_song
         global gv_mpd_playlists
         global gv_mpd_queue
 
@@ -672,9 +685,12 @@ class cast_handler(object):
 
         if song:
             log_message('/cast song %s' % (
-                playlist))
+                song))
             if gv_mpd_client:
-                gv_mpd_client.play(int(song))
+                gv_mpd_client.playid(int(song))
+
+                # force current song to show selected song
+                gv_mpd_client_song['id'] = song
 
         if shuffle:
             log_message('/cast shuffle %s' % (
@@ -693,6 +709,15 @@ class cast_handler(object):
 
                 if gv_mpd_client_status:
                     gv_mpd_client_status['repeat'] = repeat
+
+        if consume:
+            log_message('/cast consume %s' % (
+                consume))
+            if gv_mpd_client:
+                gv_mpd_client.consume(int(consume))
+
+                if gv_mpd_client_status:
+                    gv_mpd_client_status['consume'] = consume
 
         return build_cast_web_page(refresh_interval)
 
@@ -863,14 +888,6 @@ def mpd_agent():
             gv_mpd_client_status = gv_mpd_client.status()
             gv_mpd_client_song = gv_mpd_client.currentsong()
 
-            # Only extract playlists and queue once every 
-            # 30 secnds or when forced by a playlist change
-            # it's too much of a strain to do this every second
-            if loop_count % 30 == 0 or gv_mpd_queue is None:
-                log_message('Loading playlists and queue')
-                gv_mpd_playlists = gv_mpd_client.listplaylists()
-                gv_mpd_queue = gv_mpd_client.playlistinfo()
-
             if gv_verbose:
                 log_message('MPD Status:\n%s' % (
                     json.dumps(
@@ -880,6 +897,27 @@ def mpd_agent():
                     json.dumps(
                         gv_mpd_client_song, 
                         indent = 4)))
+
+            # Only extract playlists and queue once every 
+            # 30 secnds or when forced by a playlist change
+            # it's too much of a strain to do this every second
+            if (loop_count % 30 == 0 or 
+                    gv_mpd_queue is None):
+                log_message('Loading playlists and queue')
+                gv_mpd_playlists = gv_mpd_client.listplaylists()
+                gv_mpd_queue = gv_mpd_client.playlistinfo()
+
+                if gv_verbose:
+                    log_message('MPD Playlists:\n%s' % (
+                        json.dumps(
+                            gv_mpd_playlists, 
+                            indent = 4)))
+
+                    log_message('MPD Queue:\n%s' % (
+                        json.dumps(
+                            gv_mpd_queue, 
+                            indent = 4)))
+
             mpd_last_status = now
 
         except:
