@@ -47,11 +47,11 @@ Once you have selected the desired chromecast, playback should start trying to c
 
 Switch chromecast device and you should experience playback stopping on the current device and transferring to the new device. By setting the device to 'Disabled', you will disable the casting functionality. 
 
-The web interface also allows you to select stored paylists (MPD playlists only) as well as select tracks from the current queue. You can also change volume, skip forward/backward on tracks and toggle the shuffle, repeat and playlist consume modes. It's incredibly bland as an interface but I wanted to extend the features a little bit given the script is acting as an MPD client. It even shows albumart and the current playing title.
+The web interface also allows you to select stored playlists (MPD playlists only) as well as select tracks from the current queue. You can also change volume, skip forward/backward on tracks and toggle the shuffle, repeat and playlist consume modes. It's incredibly bland as an interface but I wanted to extend the features a little bit given the script is acting as an MPD client. It even shows albumart and the current playing title.
 
 It's built with Bootstrap and jquery and under normal running, updates its content each time you perform an action or every 10 seconds. The updating is suspended when the browser window/tab is not in focus. It's use is best suited for mobile or tablet devices. It will work on a normal computer browser but the controls and artwork may appear quite large due to the responsive design scaling to the larger window. 
 
-When using Volumio, be aware that the MPD queue only shows one track at a time as Volumio manages its own playlist outside of MPD. This has a knock-on effect with this web UI as it will only show a single playing track in the playlist drop-down. You can however use an MPD client to still create and manage playlists on your Volumio server and use this web client to select those playlists for playback.
+When using Volumio, be aware that the MPD queue only shows one track at a time as Volumio manages its own playlist outside of MPD. This has a knock-on effect with this web UI as it will only show a single playing track in the queue drop-down. You can however use an MPD client to still create and manage playlists on your Volumio server and use this web client to select those playlists for playback.
 
 ## How it works
 The script runs four threads:
