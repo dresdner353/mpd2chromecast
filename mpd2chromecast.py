@@ -416,11 +416,16 @@ def build_cast_web_page(refresh_interval = 10000):
                 gv_mpd_client_status['state'] == 'play'):
             playback_icon_ref = 'pause_circle_filled'
 
-        # MPD Volume
-        mpd_volume = int(gv_mpd_client_status['volume'])
+        # MPD mandatory properties
         mpd_random = int(gv_mpd_client_status['random'])
         mpd_repeat = int(gv_mpd_client_status['repeat'])
         mpd_consume = int(gv_mpd_client_status['consume'])
+
+        # MPD optional
+        if 'volume' in gv_mpd_client_status:
+            mpd_volume = int(gv_mpd_client_status['volume'])
+        else:
+            mpd_volume = -1
 
         dashboard_str += (
                 '<div class="input-group mb-3">'
@@ -449,10 +454,10 @@ def build_cast_web_page(refresh_interval = 10000):
                 '<button id="consume" type="button" class="btn btn-%s">'
                 '<i class="material-icons md-36s">remove_from_queue</i></button>'
                 '&nbsp;'
-                '<button id="voldown" type="button" class="btn btn-primary">'
+                '<button id="voldown" type="button" class="btn btn-%s">'
                 '<i class="material-icons md-36">volume_down</i></button>'
                 '&nbsp;'
-                '<button id="volup" type="button" class="btn btn-primary">'
+                '<button id="volup" type="button" class="btn btn-%s">'
                 '<i class="material-icons md-36">volume_up</i></button>'
                 '</div>'
                 ) % (
@@ -460,6 +465,8 @@ def build_cast_web_page(refresh_interval = 10000):
                         'primary' if mpd_random else 'secondary',
                         'primary' if mpd_repeat else 'secondary',
                         'primary' if mpd_consume else 'secondary',
+                        'primary' if mpd_volume != -1 else 'secondary',
+                        'primary' if mpd_volume != -1 else 'secondary',
                         )
 
         action_str = click_get_reload_template
@@ -492,27 +499,28 @@ def build_cast_web_page(refresh_interval = 10000):
         action_str = action_str.replace('__VAL__', 'next')
         jquery_str += action_str
 
-        if mpd_volume < 100:
-            next_higher_volume = mpd_volume + 1
-        else:
-            next_higher_volume = 100
+        if mpd_volume != -1:
+            if mpd_volume < 100:
+                next_higher_volume = mpd_volume + 1
+            else:
+                next_higher_volume = 100
 
-        if mpd_volume > 0:
-            next_lower_volume = mpd_volume - 1
-        else:
-            next_lower_volume = 0
+            if mpd_volume > 0:
+                next_lower_volume = mpd_volume - 1
+            else:
+                next_lower_volume = 0
 
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'voldown')
-        action_str = action_str.replace('__ARG__', 'volume')
-        action_str = action_str.replace('__VAL__', str(next_lower_volume))
-        jquery_str += action_str
+            action_str = click_get_reload_template
+            action_str = action_str.replace('__ID__', 'voldown')
+            action_str = action_str.replace('__ARG__', 'volume')
+            action_str = action_str.replace('__VAL__', str(next_lower_volume))
+            jquery_str += action_str
 
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'volup')
-        action_str = action_str.replace('__ARG__', 'volume')
-        action_str = action_str.replace('__VAL__', str(next_higher_volume))
-        jquery_str += action_str
+            action_str = click_get_reload_template
+            action_str = action_str.replace('__ID__', 'volup')
+            action_str = action_str.replace('__ARG__', 'volume')
+            action_str = action_str.replace('__VAL__', str(next_higher_volume))
+            jquery_str += action_str
 
         action_str = click_get_reload_template
         action_str = action_str.replace('__ID__', 'shuffle')
@@ -944,9 +952,14 @@ def mpd_agent():
 
         # mandatory fields
         mpd_status = gv_mpd_client_status['state']
-        mpd_volume = int(gv_mpd_client_status['volume'])
         mpd_repeat = int(gv_mpd_client_status['repeat'])
         mpd_random = int(gv_mpd_client_status['random'])
+
+        # optional fields
+        if 'volume' in gv_mpd_client_status:
+            mpd_volume = int(gv_mpd_client_status['volume'])
+        else:
+            mpd_volume = -1 # used to track unknown value
 
         # optionals (will depend on given state and stream vs file
         mpd_elapsed = 0
@@ -985,9 +998,9 @@ def mpd_agent():
             album,
             title))
 
-        log_message("MPD (%s) vol:%d %d:%02d/%d:%02d [%02d%%]" % (
+        log_message("MPD (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
             mpd_status,
-            mpd_volume,
+            'N/A' if mpd_volume == -1 else mpd_volume,
             mpd_elapsed_mins,
             mpd_elapsed_secs,
             mpd_duration_mins,
@@ -1045,10 +1058,10 @@ def mpd_agent():
             cast_duration_mins = int(cast_duration / 60)
             cast_duration_secs = cast_duration % 60
 
-            log_message("%s (%s) vol:%02d %d:%02d/%d:%02d [%02d%%]" % (
+            log_message("%s (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
                 cast_name,
                 cast_status,
-                cast_volume,
+                'N/A' if mpd_volume == -1 else cast_volume,
                 cast_elapsed_mins,
                 cast_elapsed_secs,
                 cast_duration_mins,
@@ -1130,7 +1143,8 @@ def mpd_agent():
 
         # Volume change only while playing
         if (cast_status == 'play' and 
-                cast_volume != mpd_volume):
+                cast_volume != mpd_volume and
+                mpd_volume != -1):
 
             log_message("Setting Chromecast Volume: %d" % (mpd_volume))
             # Chromecast volume is 0.0 - 1.0 (divide by 100)
@@ -1198,13 +1212,15 @@ def mpd_agent():
             # URL to stream
             cast_device.wait()
 
-            if (cast_volume != mpd_volume):
+            if (cast_volume != mpd_volume and
+                    mpd_volume != -1):
                 # Set volume to match local MPD volume
                 # avoids sudden volume changes after playback starts when 
                 # they sync up
                 log_message("Setting Chromecast Volume: %d" % (mpd_volume))
                 # Chromecast volume is 0.0 - 1.0 (divide by 100)
                 cast_device.set_volume(mpd_volume / 100)
+                cast_volume = mpd_volume
 
             # Initiate the cast
             cast_device.media_controller.play_media(
@@ -1214,7 +1230,6 @@ def mpd_agent():
             # Note the various specifics of play 
             cast_status = mpd_status
             cast_file = mpd_file
-            cast_volume = mpd_volume
 
             # Pause and seek to start of track
             # only applies to local files
