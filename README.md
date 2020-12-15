@@ -8,7 +8,7 @@ As you invoke play, stop, pause, next/previous, seek actions & volume control on
 
 **Note:** Does not work on the official Volumio Jesse-based images any longer. The Jesse release is over 5 years old and too old to keep up with various Python dependencies. It does work however on their beta images for Raspian Buster. So this limitation will go away once Volumio get official images released for Buster.
 
-**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the chromecast. If your MPD setup via Volumio or moOde is set to not allow MPD volume control or has software/hardware disabled, it may result in MPD not reporting a volume level. When this happens, the script will disable its volume support.
+**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the chromecast. If your MPD setup via Volumio or moOde is set to not allow MPD volume control, it may result in MPD not reporting a volume level. When this happens, the script will disable its volume support.
 
 ## Acknowledgements
 The script would not be possible without the dedicated hard work of others who wrote various modules that made my job a lot easier:
@@ -54,6 +54,8 @@ The web interface also allows you to select stored playlists (MPD playlists only
 It's built with Bootstrap and jquery and under normal running, updates its content each time you perform an action or every 10 seconds. The updating is suspended when the browser window/tab is not in focus. It's use is best suited for mobile or tablet devices. It will work on a normal computer browser but the controls and artwork may appear quite large due to the responsive design scaling to the larger window. 
 
 When using Volumio, be aware that the MPD queue only shows one track at a time as Volumio manages its own playlist outside of MPD. This has a knock-on effect with this web UI as it will only show a single playing track in the queue drop-down. You can however use an MPD client to still create and manage playlists on your Volumio server and use this web client to select those playlists for playback.
+
+**Note:** If you have MPD volume control disabled in your setup, you will likely notice the volume up/down buttons greyed out.
 
 ## How it works
 The script runs four threads:
