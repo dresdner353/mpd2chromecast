@@ -1007,13 +1007,6 @@ def mpd_agent():
             mpd_duration_secs,
             mpd_progress))
 
-        # Chromecast URL for media
-        if mpd_file:
-            cast_url, cast_file_type = mpd_file_to_url(mpd_file)
-        else:
-            # no file, nothing more to do
-            continue
-
         # Chromecast Status
         if (cast_device):
 
@@ -1084,6 +1077,29 @@ def mpd_agent():
                 cast_device = None
                 cast_volume = 0
                 continue
+
+        # Stop event
+        # stop and quit chromecast app
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop' and
+            cast_device):
+
+            log_message("Stopping Chromecast")
+            cast_device.media_controller.stop()
+            cast_device.quit_app()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
+
+        # Chromecast URL for media
+        # no point going any further if we 
+        # have no file to play
+        if mpd_file:
+            cast_url, cast_file_type = mpd_file_to_url(mpd_file)
+        else:
+            # no file, nothing more to do
+            continue
 
         # Get cast device when in play state and 
         # no device curently present
@@ -1176,17 +1192,6 @@ def mpd_agent():
             cast_status = mpd_status
             continue
         
-        # Stop
-        if (cast_status != 'stop' and 
-            mpd_status == 'stop'):
-
-            log_message("Stop Chromecast")
-            cast_device.media_controller.stop()
-            cast_status = mpd_status
-            cast_device = None
-            cast_volume = 0
-            continue  
-
         # Play a song/stream or next in playlist
         if ((cast_status != 'play' and
             mpd_status == 'play') or
