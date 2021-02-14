@@ -856,6 +856,7 @@ def mpd_agent():
     cast_name = ""
     cast_status = 'none'
     cast_file = 'none'
+    cast_id = -1
     cast_volume = 0
     cast_confirmed = False
     cast_failed_update_count = 0
@@ -946,9 +947,11 @@ def mpd_agent():
 
         # Start with the current playing/selected file
         mpd_file = None
+        mpd_id = -1
         if ('file' in gv_mpd_client_song and 
                 gv_mpd_client_song['file']):
             mpd_file = gv_mpd_client_song['file']
+            mpd_id = gv_mpd_client_song['id']
 
         # mandatory fields
         mpd_status = gv_mpd_client_status['state']
@@ -1032,6 +1035,7 @@ def mpd_agent():
                     cast_device = None
                     cast_status = 'none'
                     cast_file = 'none'
+                    cast_id = -1
                     cast_volume = 0
                     cast_failed_update_count = 0
                     continue
@@ -1123,6 +1127,7 @@ def mpd_agent():
             # Cast state inits
             cast_status = 'none'
             cast_file = 'none'
+            cast_id = -1
             cast_volume = 0
             continue
 
@@ -1193,9 +1198,14 @@ def mpd_agent():
             continue
         
         # Play a song/stream or next in playlist
+        # triggered by a diference between mpd/cast files
+        # or the MPD IDs. In reality, the IDs are enough
+        # but it won't do any harm to check both
         if ((cast_status != 'play' and
             mpd_status == 'play') or
-            (mpd_status == 'play' and mpd_file != cast_file)):
+            (mpd_status == 'play' and (
+                mpd_file != cast_file or
+                mpd_id != cast_id))):
 
             log_message("Casting URL:%s type:%s" % (
                 cast_url,
@@ -1235,6 +1245,7 @@ def mpd_agent():
             # Note the various specifics of play 
             cast_status = mpd_status
             cast_file = mpd_file
+            cast_id = mpd_id
 
             # Pause and seek to start of track
             # only applies to local files
