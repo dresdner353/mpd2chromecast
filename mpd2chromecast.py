@@ -855,7 +855,6 @@ def mpd_agent():
     cast_device = None # initial state
     cast_name = ""
     cast_status = 'none'
-    cast_file = 'none'
     cast_id = -1
     cast_volume = 0
     cast_confirmed = False
@@ -1034,14 +1033,15 @@ def mpd_agent():
                     log_message("Detected broken controller after %d status failures" % (max_cast_failed_updates))
                     cast_device = None
                     cast_status = 'none'
-                    cast_file = 'none'
                     cast_id = -1
                     cast_volume = 0
                     cast_failed_update_count = 0
                     continue
 
+            # Elapsed time as reported by the cast device
             cast_elapsed = int(cast_device.media_controller.status.current_time)
-
+            # Cast player state as reported by the device
+            cast_player_state = cast_device.media_controller.status.player_state
             # Length and progress calculation
             if cast_device.media_controller.status.duration is not None:
                 cast_duration = int(cast_device.media_controller.status.duration)
@@ -1126,7 +1126,6 @@ def mpd_agent():
 
             # Cast state inits
             cast_status = 'none'
-            cast_file = 'none'
             cast_id = -1
             cast_volume = 0
             continue
@@ -1147,7 +1146,7 @@ def mpd_agent():
         # cast_elapsed - 1 when the 
         # chromecast is reporting elapsed time
         # Does not apply for radio streams
-        if (not cast_file.startswith('http') and 
+        if (not mpd_file.startswith('http') and 
                 not cast_confirmed and 
                 mpd_status == 'pause' and 
                 cast_status == 'play'):
@@ -1185,10 +1184,10 @@ def mpd_agent():
         # Resume play
         # but only if the track is the same
         # needed to protect a scenario where we pause
-        # and then chane track
+        # and then change track
         # prevents a brief unpause of play before the sudden
         # change
-        if (mpd_file == cast_file and
+        if (mpd_id == cast_id and
                 cast_status == 'pause' and 
             mpd_status == 'play'):
 
@@ -1198,14 +1197,15 @@ def mpd_agent():
             continue
         
         # Play a song/stream or next in playlist
-        # triggered by a diference between mpd/cast files
-        # or the MPD IDs. In reality, the IDs are enough
-        # but it won't do any harm to check both
-        if ((cast_status != 'play' and
-            mpd_status == 'play') or
-            (mpd_status == 'play' and (
-                mpd_file != cast_file or
-                mpd_id != cast_id))):
+        # triggered by:
+        # 1) different play states between mpd and chromecast,
+        # 2) different mpd/cast IDs (playlist change)
+        # 3) chromecast is IDLE and mpd_elapsed at 0 (repeat same track)
+        if (mpd_status == 'play' and 
+                (cast_status != 'play' or 
+                    mpd_id != cast_id or 
+                    (mpd_elapsed == 0 and 
+                        cast_player_state == 'IDLE'))):
 
             log_message("Casting URL:%s type:%s" % (
                 cast_url,
@@ -1244,12 +1244,11 @@ def mpd_agent():
 
             # Note the various specifics of play 
             cast_status = mpd_status
-            cast_file = mpd_file
             cast_id = mpd_id
 
             # Pause and seek to start of track
             # only applies to local files
-            if (not cast_file.startswith('http')):
+            if (not mpd_file.startswith('http')):
                 log_message("Pausing MPD (initial cast)")
                 gv_mpd_client.pause(1)
                 gv_mpd_client.seekcur(0)
@@ -1266,11 +1265,11 @@ def mpd_agent():
         # seek if there is a difference of min 10 seconds
         # That prevents mis-fire if the two elapsed times are 
         # just out of sync versus an actual mpd seek being performed
-        if (not cast_file.startswith('http') and 
+        if (not mpd_file.startswith('http') and 
                 mpd_status == 'play' and 
                 cast_status == 'play' and 
-                cast_confirmed and
-                cast_elapsed > 0 and
+                cast_confirmed and 
+                cast_elapsed > 0 and 
                 abs(mpd_elapsed - cast_elapsed) >= 10):
             log_message(
                     "Sync MPD elapsed %d secs to Chromecast" % (
@@ -1284,7 +1283,7 @@ def mpd_agent():
         # Radio streams ignored for this.
         # The value we then set on mpd is 1 second 
         # behind the chromecast elapsed time.
-        if (not cast_file.startswith('http') and
+        if (not mpd_file.startswith('http') and
                 mpd_status == 'play' and 
                 cast_elapsed > 0 and 
                 cast_elapsed % 10 == 0 and
