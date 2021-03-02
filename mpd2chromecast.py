@@ -102,8 +102,7 @@ def get_chromecast(name):
                 1,
                 "Getting chromecast device object")
         # Get the device handle
-        # FIXME this call has issues
-        device = pychromecast.get_chromecast_from_service(
+        device = pychromecast.get_chromecast_from_cast_info(
                 gv_discovered_devices[name],
                 gv_zconf)
     except:
