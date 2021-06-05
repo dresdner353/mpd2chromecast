@@ -15,6 +15,7 @@ import cherrypy
 import json
 import socket
 import pathlib
+import traceback
 
 
 def log_message(verbose,
@@ -103,13 +104,14 @@ def get_chromecast(name):
                 "Getting chromecast device object")
         # Get the device handle
         # FIXME this call has issues
-        device = pychromecast.get_chromecast_from_service(
+        device = pychromecast.get_chromecast_from_cast_info(
                 gv_discovered_devices[name],
                 gv_zconf)
     except:
+        traceback.print_exc()
         log_message(
                 1,
-                "Failed to chromecast device object")
+                "Failed to get chromecast device object")
         device = None
 
     return device
