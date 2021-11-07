@@ -63,7 +63,11 @@ su ${HOME_USER} -c "bash -c install_mpd2chromecast"
 
 # systemd service
 echo "Systemd steps for ~${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
-sed -e 's/__USER__/pi/g'  ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
+
+# create a user-specific variant of service file
+sed -e "s/__USER__/${HOME_USER}/g"  ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
+
+# install and start service
 cp /tmp/mpd2chromecast.service /etc/systemd/system
 systemctl daemon-reload
 systemctl enable mpd2chromecast
