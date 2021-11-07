@@ -4,8 +4,32 @@
 import pychromecast
 import argparse
 import os
+import time
+import sys
 import json
 
+
+def load_config():
+    global gv_cfg_filename
+    global gv_cfg_dict
+
+    cfg_file = open(gv_cfg_filename, 'r')
+    json_str = cfg_file.read()
+    gv_cfg_dict = json.loads(json_str)
+    cfg_file.close()
+
+    return 
+
+
+def save_config():
+    global gv_cfg_filename
+    global gv_cfg_dict
+
+    cfg_file = open(gv_cfg_filename, 'w') 
+    cfg_file.write('%s\n' % (json.dumps(gv_cfg_dict)))
+    cfg_file.close()
+
+    return 
 # main
 
 parser = argparse.ArgumentParser(
@@ -21,6 +45,15 @@ cast_name = args['name']
 
 # Determine home directory
 home = os.path.expanduser("~")
+gv_cfg_filename = home + '/.mpd2chromecast'   
+
+# config defaults
+gv_cfg_dict = {}
+gv_cfg_dict['castDevice'] = 'Disabled'
+gv_cfg_dict['castMode'] = 'direct'
+
+if os.path.exists(gv_cfg_filename):
+    load_config()
 
 # Scan if no device specified
 if (cast_name == ""):
@@ -32,10 +65,13 @@ if (cast_name == ""):
     devices, browser = pychromecast.get_chromecasts()
     print("Found %d devices" % (len(devices)))
 
-    # Default "off" device
-    device_list = ['Disabled']
+    # build list of discovered devices and sort
+    device_list = []
     for cc in devices:
         device_list.append(cc.device.friendly_name)
+    device_list.sort()
+    # prepend Default "off" device
+    device_list = ['Disabled'] + device_list
 
     # Display and select
     total_devices = len(device_list)
@@ -52,8 +88,5 @@ if (cast_name == ""):
 
 if cast_name != "":
     print("Setting desired Chromecast to [%s]" % (cast_name))
-    cfg_file = open(home + '/.castrc', 'w') 
-    json_cfg = {}
-    json_cfg['chromecast'] = cast_name
-    cfg_file.write('%s\n' % (json.dumps(json_cfg)))
-    cfg_file.close()
+    gv_cfg_dict['castDevice'] = cast_name
+    save_config()
