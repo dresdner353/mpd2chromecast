@@ -6,9 +6,9 @@ The script uses an MPD client to monitor playback state of MPD, the underlying m
 
 As you invoke play, stop, pause, next/previous, seek actions & volume control on your media platform, these are detected by the MPD interface and then relayed to the Chromecast to match the behaviour. The script also provides album artwork support that will appear on screen for video-based chromecasts.
 
-**Note:** Does not work on the official Volumio Jesse-based images any longer. The Jesse release is over 5 years old and too old to keep up with various Python dependencies. It does work however on their beta images for Raspian Buster. So this limitation will go away once Volumio get official images released for Buster.
+**Note:** Does not work with the official Volumio 2.x releases but works fine on the 3.0 beta/RC releases.
 
-**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the chromecast. If your MPD setup via Volumio or moOde is set to not allow MPD volume control, it may result in MPD not reporting a volume level. When this happens, the script will disable its volume support.
+**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the cast device. If your MPD setup via Volumio or moOde is set to not allow MPD volume control, it may result in MPD not reporting a volume level. When this happens, the script will just disable its volume support.
 
 ## Acknowledgements
 The script would not be possible without the dedicated hard work of others who wrote various modules that made my job a lot easier:
@@ -35,27 +35,66 @@ curl -s https://raw.githubusercontent.com/dresdner353/mpd2chromecast/master/inst
 ```
 This command will:
 * Install required packages..  
-pip3, cron, pychromecast cherrypy python-mpd2 mutagen
-* Enable cron (scheduler)  
+pip3, pychromecast cherrypy python-mpd2 mutagen
 * Download mpd2chromecast  
-* Enable cronjob to auto-start mpd2chromecast  
+* Configure and start it as a background service (systemd)
 
 ## Web Interface
 ![Cast Control Web Interface](./cast_web_control.jpg)
 
-Browse to http://[your device ip]:8090/cast and you will see a very simple web interface for managing the cast devices. The first drop-down combo shows all discovered chromecast devices. Select the desired device and it will set that as the active cast device. 
+Browse to ```http://[your device ip]:8090``` and you will see a very simple web interface for managing the cast devices. The first drop-down combo shows all discovered Google cast-enabled devices. Select the desired device and it will set that as the active cast device. 
 
 Once you have selected the desired chromecast, playback should start trying to cast the current track to the selected chromecast. From you preferred UI (Volumio or Moode Web I/F, MPD client, apps etc), try playing tracks, playlists, changing tracks, pausing, skipping and changing volume and you should see the Chromecast react pretty quickly as the script detects local MPD playback changes and casts the new tracks.
 
 Switch chromecast device and you should experience playback stopping on the current device and transferring to the new device. By setting the device to 'Disabled', you will disable the casting functionality. 
 
-The web interface also allows you to select stored playlists (MPD playlists only) as well as select tracks from the current queue. You can also change volume, skip forward/backward on tracks and toggle the shuffle, repeat and playlist consume modes. It's incredibly bland as an interface but I wanted to extend the features a little bit given the script is acting as an MPD client. It even shows albumart and the current playing title.
+The 2nd combo box (with play icon) can be used to toggle between two playback modes: 
+* Cast file URL  
+This is the default mode which serves the playing track file as a URL to the cast device. The end device will stream the selected file directly and perform all decoding. 
 
-It's built with Bootstrap and jquery and under normal running, updates its content each time you perform an action or every 10 seconds. The updating is suspended when the browser window/tab is not in focus. It's use is best suited for mobile or tablet devices. It will work on a normal computer browser but the controls and artwork may appear quite large due to the responsive design scaling to the larger window. 
+* Cast MPD Output Stream (experimental)  
+This is experimental at present and only runs (easily) with moOde. To use this mode in moOde, you need to navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). When you select this streaming mode in mpd2chromecast, it passes the fixed URL ```http://<IP>:8000``` to the selected cast device. The end result is that the stream being played is the output stream from MPD and not the original file. This allows for integration of DSP modes in MPD, crossfade and even gapless playback. It's not perfect and mileage may vary depending on how well your network works. 
 
-When using Volumio, be aware that the MPD queue only shows one track at a time as Volumio manages its own playlist outside of MPD. This has a knock-on effect with this web UI as it will only show a single playing track in the queue drop-down. You can however use an MPD client to still create and manage playlists on your Volumio server and use this web client to select those playlists for playback.
+## Enabling/Disabling the Service and Troubleshooting
+To see the running script. ssh into the pi and run:
+```
+ps -ef | grep mpd2chromecast
+```
 
-**Note:** If you have MPD volume control disabled in your setup, you will likely notice the volume up/down buttons greyed out.
+If running, you should see a running process like this:
+```
+pi       18160     1  5 21:41 ?        00:00:08 /usr/bin/python3 /home/pi/mpd2chromecast/mpd2chromecast.py
+```
+
+That script was run by the systemd service installed. You can stop and start this as required:
+```
+# stop the service
+sudo systemctl stop mpd2chromecast
+
+# start the service
+sudo systemctl start mpd2chromecast
+
+# restart the service
+sudo systemctl restart mpd2chromecast
+
+# disable the service
+# This prevents the service restarting, even after a reboot
+sudo systemctl stop mpd2chromecast
+sudo systemctl disable mpd2chromecast
+
+# enable the service 
+sudo systemctl enable mpd2chromecast
+sudo systemctl start mpd2chromecast
+```
+
+If asked to grab logs as part of troubleshooting, it's best to do something like the following:
+```
+sudo systemctl stop mpd2chromecast
+python3 mpd2chromecast/mpd2chromecast.py
+
+```
+The above will stop the background service and let you run the script dirctly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command even redirect it to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
+
 
 ## How it works
 The script runs four threads:
@@ -66,7 +105,7 @@ This is to monitor the playback state of the server via MPD API allowing us to k
 This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide the control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
 
 * Config  
-This thread just monitors config (~/.castrc) and changes one internal global variable for the selected chromecast device.
+This thread just monitors config (~/.mpd2chromecast) and changes one internal global variable for the selected chromecast device.
 
 * Chromecast Discovery  
 This thread runs on loop every minute, scanning for available chromecasts and uses the details to obtain API handles on the desired chromecast for streaming. 
@@ -94,6 +133,8 @@ The title of the current track is shown on the left. That is the only editable t
 Getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet working (although it seems to be present in the code). Both Volumio and moOde have their own ways of extracting album art separate from MPD but neither make it seamless to grab this data via native APIs. The main issue was timing where the native API is not always in sync with the MPD playlist. It became a hit and miss in getting accurate albumart with the wrong image often being served up. 
 
 So in the end, to keep things more universal, I copied what MPD server-side itself does... when a track is being cast, the script checks the parent directory of the said file and checks for cover.(png|jpg|tiff|bmp|gif). If that file is found, it generates a URL for this file and serves it to the Chromecast along with the audio file URL. 
+
+**Note:** If you use the "Cast MPD Output Stream" mode, no albumart is sent to the cast devices. There is no way to do this and change the artwork as the tracks change without recasting each time. The whole purpose of this mode was to allow for gapless playback and that requires an uninterrupted stream.
 
 ## Extracting Albumart from your files
 Not everyone will have a cover.XXX file in each album folder. I've always tried to embed artwork into my ripped flac and mp3 files. So I wrote an assistant python script (extract_albumart.py) which uses the Python mutagen module to scan a filesystem of music files, test for non-presence of cover.XXX files and then try to extract the first image from the first music file it finds in each directory. It's not a guaranteed scenario expecially if separate artwork exists per file, but its a decent shot at filling in the gaps.
