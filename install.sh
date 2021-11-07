@@ -63,7 +63,7 @@ apt-get -y install python3-pip
 pip3 install pychromecast cherrypy python-mpd2 mutagen
 
 # install mod2chromecast
-#su ${HOME_USER} -c "bash -c install_mpd2chromecast"
+su ${HOME_USER} -c "bash -c install_mpd2chromecast"
 
 # systemd service
 echo "Systemd steps for ~${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
