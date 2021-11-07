@@ -93,7 +93,7 @@ sudo systemctl stop mpd2chromecast
 python3 mpd2chromecast/mpd2chromecast.py
 
 ```
-The above will stop the background service and let you run the script dirctly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command even redirect it to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
+The above will stop the background service and let you run the script directly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command even redirect it to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
 
 
 ## How it works
