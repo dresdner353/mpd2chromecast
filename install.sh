@@ -22,10 +22,6 @@ function install_mpd2chromecast {
         # reapply filtered crontab
         crontab /tmp/${USER}.cron
     fi
-
-    # kill any remnants of the existing scripts
-    pkill -f mpd2chromecast.py
-    pkill -f mpd2chromecast.sh
 }
 
 # export function for su call
