@@ -13,17 +13,15 @@ function install_mpd2chromecast {
     rm -rf mpd2chromecast
     git clone https://github.com/dresdner353/mpd2chromecast.git
 
-    # Crontab
-    echo "Adding cron job..."
-    # extract any existing crontab entries, deleting refs to mpd2chromecast
-    crontab -l | sed -e '/mpd2chromecast/d' >/tmp/${USER}.cron
-
-    # Add in mpd2chromecast entry
-    echo "# mpd2chromecast keepalive, run every minute" >> /tmp/${USER}.cron
-    echo "* * * * * ${HOME}/mpd2chromecast/mpd2chromecast.sh keepalive > /dev/null" >> /tmp/${USER}.cron
-
-    # Overwrite crontab
-    crontab /tmp/${USER}.cron
+    # Purge old entries from crontab if cron is installed
+    if [[ -f /usr/sbin/cron ]]
+    then 
+        echo "purging old crontab entries"
+        # filter out existing entries
+        crontab -l | sed -e '/mpd2chromecast/d' >/tmp/${USER}.cron
+        # reapply filtered crontab
+        crontab /tmp/${USER}.cron
+    fi
 
     # kill any remnants of the existing scripts
     pkill -f mpd2chromecast.py
@@ -48,9 +46,11 @@ MOODE_CHECK=/usr/local/bin/moodeutl
 if [[ -f ${VOLUMIO_CHECK} ]]
 then
     HOME_USER=volumio
+    HOME_DIR=/home/volumio
 elif [[ -f ${MOODE_CHECK} ]]
 then
     HOME_USER=pi
+    HOME_DIR=/home/pi
 else
     echo "Cannot determine variant (volumio or moOde)"
     exit 1
@@ -59,13 +59,15 @@ echo "Detected home user:${HOME_USER}"
 
 
 # install packages
-apt-get -y update
-apt-get -y install cron python3-pip
+apt-get -y install python3-pip
 pip3 install pychromecast cherrypy python-mpd2 mutagen
 
-# Enable cron
-update-rc.d cron enable 2 3 4 5
-/etc/init.d/cron restart
+# install mod2chromecast
+#su ${HOME_USER} -c "bash -c install_mpd2chromecast"
 
-
-su ${HOME_USER} -c "bash -c install_mpd2chromecast"
+# systemd service
+echo "Systemd steps for ~${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
+cp ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service /etc/systemd/system
+systemctl daemon-reload
+systemctl enable mpd2chromecast
+systemctl restart mpd2chromecast
