@@ -6,7 +6,7 @@ import zeroconf
 import mpd
 import requests
 import urllib
-import threading
+import concurrent.futures
 import argparse
 import time
 import os
@@ -21,7 +21,7 @@ import traceback
 def log_message(verbose,
         message):
     if verbose:
-        print("%s %s" % (
+        print('%s %s' % (
             time.asctime(),
             message))
         sys.stdout.flush()
@@ -29,14 +29,16 @@ def log_message(verbose,
     return
 
 # Config inits
-gv_cfg_filename = ""
-gv_chromecast_name = ""
+gv_cfg_filename = ''
+gv_cfg_dict = {}
+gv_cfg_dict['castDevice'] = 'Disabled'
+gv_cfg_dict['castMode'] = 'bogus'
 gv_cast_port = 8090
-gv_platform_variant = "Unknown"
+gv_platform_variant = 'Unknown'
 
-# Discovered Chromecasts dict
+# Discovered cast devices dict
 # and related zconf object
-gv_discovered_devices = {}
+gv_cast_devices_dict = {}
 gv_zconf = None
 
 # Fixed MPD music location
@@ -46,12 +48,6 @@ gv_mpd_music_dir = '/var/lib/mpd/music'
 # Global MPD agent deadlock timestamp
 gv_mpd_agent_timestamp = 0
 
-# global handles on MPD client
-gv_mpd_client = None
-gv_mpd_client_status = None
-gv_mpd_client_song = None
-gv_mpd_playlists = None
-gv_mpd_queue = None
 
 def determine_platform_variant():
     # Determine the stream variant we have
@@ -74,8 +70,8 @@ def determine_platform_variant():
 
 
 
-def get_chromecast(name):
-    global gv_discovered_devices
+def get_cast_device(name):
+    global gv_cast_devices_dict
     global gv_zconf
 
     if (not name or 
@@ -84,78 +80,95 @@ def get_chromecast(name):
 
     log_message(
             1,
-            "Looking up Chromecast %s" % (name))
+            'Looking up Cast Device [%s]' % (name))
 
     if not gv_zconf:
         log_message(
                 1, 
-                "No zconf service active")
+                'No zconf service active')
         return None
 
-    if not name in gv_discovered_devices:
+    if not name in gv_cast_devices_dict:
         log_message(
                 1,
-                "chromecast not found in discovered device services")
+                'cast device not found in discovered device services')
         return None
 
     try:
         log_message(
                 1,
-                "Getting chromecast device object")
+                'Getting cast device object')
         # Get the device handle
         # FIXME this call has issues
         device = pychromecast.get_chromecast_from_cast_info(
-                gv_discovered_devices[name],
+                gv_cast_devices_dict[name],
                 gv_zconf)
     except:
         traceback.print_exc()
         log_message(
                 1,
-                "Failed to get chromecast device object")
+                'Failed to get cast device object')
         device = None
 
     return device
 
 
-def load_config(cfg_filename):
-    global gv_chromecast_name
+def load_config():
+    global gv_cfg_filename
+    global gv_cfg_dict
 
     log_message(
             1,
-            "Loading config from %s" % (cfg_filename))
-    cfg_file = open(cfg_filename, 'r')
+            'Loading config from %s' % (gv_cfg_filename))
+    cfg_file = open(gv_cfg_filename, 'r')
     json_str = cfg_file.read()
-    json_cfg = json.loads(json_str)
+    gv_cfg_dict = json.loads(json_str)
     cfg_file.close()
 
-    gv_chromecast_name = json_cfg['chromecast']
     log_message(
             1,
-            "Set Chromecast device to [%s]" % (
-                gv_chromecast_name))
+            'Config [%s]' % (
+                gv_cfg_dict))
 
-    return
+    return 
+
+
+def save_config():
+    global gv_cfg_filename
+    global gv_cfg_dict
+
+    log_message(
+            1,
+            'Saving config to %s' % (gv_cfg_filename))
+    cfg_file = open(gv_cfg_filename, 'w') 
+    cfg_file.write('%s\n' % (json.dumps(gv_cfg_dict)))
+    cfg_file.close()
+
+    return 
 
 
 def config_agent():
-    # monitor the config file and react on changes
     global gv_cfg_filename
 
-    home = os.path.expanduser("~")
-    gv_cfg_filename = home + '/.castrc'
+    # monitor the config file and react on changes
+    home = os.path.expanduser('~')
+    gv_cfg_filename = home + '/.mpd2chromecast'   
+    log_message(
+            1,
+            'Config file is %s' % (gv_cfg_filename))
 
     last_check = 0
 
     # 5-second check for config changes
-    while (1):
+    while (True):
         if os.path.exists(gv_cfg_filename):
             config_last_modified = os.path.getmtime(gv_cfg_filename)
             if config_last_modified > last_check:
                 log_message(
                         2,
-                        "Detected update to %s" % (
+                        'Detected update to %s' % (
                             gv_cfg_filename))
-                load_config(gv_cfg_filename)
+                load_config()
                 last_check = config_last_modified
 
         time.sleep(5)
@@ -163,50 +176,50 @@ def config_agent():
     return 
 
 
-def chromecast_agent():
-    global gv_discovered_devices
+def cast_device_discovery_agent():
+    global gv_cast_devices_dict
     global gv_zconf
 
-    def chromecast_add_callback(uuid, name):
+    def cast_device_add_callback(uuid, name):
         # Add discovered device to global dict
         # keyed on friendly name and stores the full 
         # service record
         friendly_name = cast_listener.services[uuid][3]
-        gv_discovered_devices[friendly_name] = cast_listener.services[uuid]
+        gv_cast_devices_dict[friendly_name] = cast_listener.services[uuid]
 
-    def chromecast_remove_callback(uuid, name, service):
+    def cast_device_remove_callback(uuid, name, service):
         # purge removed devices from the global dict
         friendly_name = cast_listener.services[uuid][3]
-        if friendly_name in gv_discovered_devices:
-            del gv_discovered_devices[friendly_name]
+        if friendly_name in gv_cast_devices_dict:
+            del gv_cast_devices_dict[friendly_name]
 
+    # cast listener (add, remove, update)
+    # treat update as add
     cast_listener = pychromecast.CastListener(
-            chromecast_add_callback,
-            chromecast_remove_callback)
+            cast_device_add_callback,
+            cast_device_remove_callback,
+            cast_device_add_callback)
 
     gv_zconf = zeroconf.Zeroconf()
     cast_browser = pychromecast.discovery.start_discovery(
             cast_listener, 
             gv_zconf)
 
-    while (1):
+    while (True):
         time.sleep(30)
         log_message(
-                1,
-                'Discovered cast devices: %s' % (
-            list(gv_discovered_devices.keys())))
+                0,
+                'All discovered cast devices: %s' % (
+            list(gv_cast_devices_dict.keys())))
 
     return 
 
 
 def build_cast_web_page(refresh_interval = 10000):
-    global gv_discovered_devices
-    global gv_chromecast_name
-    global gv_mpd_client_status
+    global gv_cast_devices_dict
     global gv_mpd_client_song
-    global gv_mpd_playlists
-    global gv_mpd_queue
     global gv_verbose
+    global gv_cfg_dict
 
     log_message(
             gv_verbose,
@@ -271,18 +284,6 @@ def build_cast_web_page(refresh_interval = 10000):
         </body>
     """
 
-    # action code for buttons
-    click_get_reload_template = """
-        $("#__ID__").click(function(){
-            $.get('/cast?__ARG__=__VAL__', function(data, status) {
-                // clear refresh timer before reload
-                clearInterval(refresh_timer);
-                $("#dashboard").html(data);
-            });
-        });
-
-    """
-
     # action code for combos
     # click function resets refresh timer to 
     # 2 minutes
@@ -304,8 +305,8 @@ def build_cast_web_page(refresh_interval = 10000):
     """
 
 
-    dashboard_str = ""
-    jquery_str = ""
+    dashboard_str = ''
+    jquery_str = ''
 
     # main container and card
     dashboard_str += (
@@ -314,21 +315,22 @@ def build_cast_web_page(refresh_interval = 10000):
             '<div class="card-body">'
             ) 
 
+    # Cast Device Combo
     dashboard_str += (
             '<div class="input-group mb-3">'
             '<i class="material-icons md-36">%s</i>&nbsp;'
-            '<select class="custom-select custom-select" id="chromecast" name="chromecast">'
+            '<select class="custom-select custom-select" id="castDevice" name="castDevice">'
             ) % (
-                    'cast_connected' if gv_chromecast_name != 'Disabled' else 'cast'
+                    'cast_connected' if gv_cfg_dict['castDevice'] != 'Disabled' else 'cast'
                     )
 
     # Construct a sorted list of discovered device names
     # and put 'Disabled' at the top
     device_list = ['Disabled']
-    device_list += sorted(list(gv_discovered_devices.keys()))
+    device_list += sorted(list(gv_cast_devices_dict.keys()))
 
     for device in device_list:
-        if device == gv_chromecast_name:
+        if device == gv_cfg_dict['castDevice']:
             selected_str = 'selected'
         else:
             selected_str = ''
@@ -339,270 +341,52 @@ def build_cast_web_page(refresh_interval = 10000):
                     device)
                 )
 
-    # Chromecast combo box end
+    # Cast device combo box end
     dashboard_str += (
             '</select>'
             '</div>'
             )
 
-    # action code for selecting a device
+    # action code for selecting a cast device
     action_str = change_get_reload_template
-    action_str = action_str.replace('__ID__', 'chromecast')
+    action_str = action_str.replace('__ID__', 'castDevice')
     jquery_str += action_str
 
-    # Playlists
-    if (gv_mpd_playlists and
-            len(gv_mpd_playlists) > 0):
+    # Cast Mode Combo
+    dashboard_str += (
+            '<div class="input-group mb-3">'
+            '<i class="material-icons md-36">play_circle</i>&nbsp;'
+            '<select class="custom-select custom-select" id="castMode" name="castMode">'
+            )  
 
-        dashboard_str += (
-                '<div class="input-group mb-3">'
-                '<i class="material-icons md-36">playlist_play</i>&nbsp;'
-                '<select class="custom-select custom-select" id="playlist" name="playlist">'
-                ) 
+    cast_mode_list = ['direct', 'mpd']
+    cast_mode_dict = {
+            'direct' : 'Cast file URL (default)',
+            'mpd' : 'Cast MPD Output Stream (experimental)'
+            }
 
-        # Construct a list of playlists
-        dashboard_str += (
-                '     <option value="None">Select Playlist</option>' 
-                )
-        for item in gv_mpd_playlists:
-            dashboard_str += (
-                    '     <option value="%s">%s</option>' % (
-                        item['playlist'], 
-                        item['playlist'])
-                    )
-
-        # playlist combo box end 
-        dashboard_str += (
-                '</select>'
-                '</div>'
-                )
-
-        # action code for selecting a playlist
-        action_str = change_get_reload_template
-        action_str = action_str.replace('__ID__', 'playlist')
-        jquery_str += action_str
-
-    # Queue (current playlist)
-    if (gv_mpd_queue and
-            len(gv_mpd_queue) > 0):
-
-        if (gv_mpd_client_song and 
-                'id' in gv_mpd_client_song):
-            current_id = gv_mpd_client_song['id']
+    for cast_mode in cast_mode_list:
+        if cast_mode == gv_cfg_dict['castMode']:
+            selected_str = 'selected'
         else:
-            current_id = "none" 
-
+            selected_str = ''
         dashboard_str += (
-                '<div class="input-group mb-3">'
-                '<i class="material-icons md-36">queue_music</i>&nbsp;'
-                '<select class="custom-select custom-select" id="song" name="song">'
-                ) 
-
-        # Construct a list of songs
-        dashboard_str += (
-                '<option value="None">Select Track</option>' 
+                '<option value="%s" %s>%s</option>' % (
+                    cast_mode, 
+                    selected_str, 
+                    cast_mode_dict[cast_mode])
                 )
 
-        # Each item named by artist - title or just name and 
-        # and the selection value is the songid field
-        for item in gv_mpd_queue:
-            if 'artist' in item and 'title' in item:
-                if type(item['artist']) == list:
-                    artist = item['artist'][0]
-                else:
-                    artist = item['artist']
-                queue_title = '%s - %s' % (
-                        artist,
-                        item['title'])
-            elif 'name' in item:
-                queue_title = '%s' % (
-                        item['name'])
-            else:
-                queue_title = 'Unknown'
+    # Cast mode combo box end
+    dashboard_str += (
+            '</select>'
+            '</div>'
+            )
 
-            dashboard_str += (
-                    '<option value="%d" %s>%s</option>' % (
-                        int(item['id']),
-                        'selected' if item['id'] == current_id else '',
-                        queue_title,
-                        )
-                    )
-
-        # playlist combo box end 
-        dashboard_str += (
-                '</select>'
-                '</div>'
-                )
-
-        # action code for selecting a track from queue
-        action_str = change_get_reload_template
-        action_str = action_str.replace('__ID__', 'song')
-        jquery_str += action_str    
-
-    # MPD Playback
-    if gv_mpd_client_status:
-        # material icon.. play by default and pause if playing
-        playback_icon_ref = 'play_circle_filled'
-        if (gv_mpd_client_status and 
-                gv_mpd_client_status['state'] == 'play'):
-            playback_icon_ref = 'pause_circle_filled'
-
-        # MPD mandatory properties
-        mpd_random = int(gv_mpd_client_status['random'])
-        mpd_repeat = int(gv_mpd_client_status['repeat'])
-        mpd_consume = int(gv_mpd_client_status['consume'])
-
-        # MPD optional
-        if 'volume' in gv_mpd_client_status:
-            mpd_volume = int(gv_mpd_client_status['volume'])
-        else:
-            mpd_volume = -1
-
-        dashboard_str += (
-                '<div class="input-group mb-3">'
-                '<button id="prev" type="button" class="btn btn-primary">'
-                '<i class="material-icons md-36">skip_previous</i></button>'
-                '&nbsp;'
-                '<button id="prev30" type="button" class="btn btn-primary">'
-                '<i class="material-icons md-36">replay_30</i></button>'
-                '&nbsp;'
-                '<button id="play" type="button" class="btn btn-primary">'
-                '<i class="material-icons md-36">%s</i></button>'
-                '&nbsp;'
-                '<button id="next30" type="button" class="btn btn-primary">'
-                '<i class="material-icons md-36">forward_30</i></button>'
-                '&nbsp;'
-                '<button id="next" type="button" class="btn btn-primary">'
-                '<i class="material-icons md-36">skip_next</i></button>'
-                '</div>'
-                '<div class="input-group mb-3">'
-                '<button id="shuffle" type="button" class="btn btn-%s">'
-                '<i class="material-icons md-36">shuffle</i></button>'
-                '&nbsp;'
-                '<button id="repeat" type="button" class="btn btn-%s">'
-                '<i class="material-icons md-36s">repeat</i></button>'
-                '&nbsp;'
-                '<button id="consume" type="button" class="btn btn-%s">'
-                '<i class="material-icons md-36s">remove_from_queue</i></button>'
-                '&nbsp;'
-                '<button id="voldown" type="button" class="btn btn-%s">'
-                '<i class="material-icons md-36">volume_down</i></button>'
-                '&nbsp;'
-                '<button id="volup" type="button" class="btn btn-%s">'
-                '<i class="material-icons md-36">volume_up</i></button>'
-                '</div>'
-                ) % (
-                        playback_icon_ref,
-                        'primary' if mpd_random else 'secondary',
-                        'primary' if mpd_repeat else 'secondary',
-                        'primary' if mpd_consume else 'secondary',
-                        'primary' if mpd_volume != -1 else 'secondary',
-                        'primary' if mpd_volume != -1 else 'secondary',
-                        )
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'prev')
-        action_str = action_str.replace('__ARG__', 'playback')
-        action_str = action_str.replace('__VAL__', 'prev')
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'prev30')
-        action_str = action_str.replace('__ARG__', 'seek')
-        action_str = action_str.replace('__VAL__', '-30')
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'play')
-        action_str = action_str.replace('__ARG__', 'playback')
-        action_str = action_str.replace('__VAL__', 'play')
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'next30')
-        action_str = action_str.replace('__ARG__', 'seek')
-        action_str = action_str.replace('__VAL__', '%2b30')
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'next')
-        action_str = action_str.replace('__ARG__', 'playback')
-        action_str = action_str.replace('__VAL__', 'next')
-        jquery_str += action_str
-
-        if mpd_volume != -1:
-            if mpd_volume < 100:
-                next_higher_volume = mpd_volume + 1
-            else:
-                next_higher_volume = 100
-
-            if mpd_volume > 0:
-                next_lower_volume = mpd_volume - 1
-            else:
-                next_lower_volume = 0
-
-            action_str = click_get_reload_template
-            action_str = action_str.replace('__ID__', 'voldown')
-            action_str = action_str.replace('__ARG__', 'volume')
-            action_str = action_str.replace('__VAL__', str(next_lower_volume))
-            jquery_str += action_str
-
-            action_str = click_get_reload_template
-            action_str = action_str.replace('__ID__', 'volup')
-            action_str = action_str.replace('__ARG__', 'volume')
-            action_str = action_str.replace('__VAL__', str(next_higher_volume))
-            jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'shuffle')
-        action_str = action_str.replace('__ARG__', 'shuffle')
-        action_str = action_str.replace('__VAL__', str((mpd_random + 1) % 2))
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'repeat')
-        action_str = action_str.replace('__ARG__', 'repeat')
-        action_str = action_str.replace('__VAL__', str((mpd_repeat + 1) % 2))
-        jquery_str += action_str
-
-        action_str = click_get_reload_template
-        action_str = action_str.replace('__ID__', 'consume')
-        action_str = action_str.replace('__ARG__', 'consume')
-        action_str = action_str.replace('__VAL__', str((mpd_consume + 1) % 2))
-        jquery_str += action_str
-
-        # Albumart and curent track details
-        if (gv_mpd_client_song and 
-                'file' in gv_mpd_client_song):
-            albumart_url = get_albumart_url(gv_mpd_client_song['file'])
-            if albumart_url:
-                if type(gv_mpd_client_song['artist']) == list:
-                    artist = gv_mpd_client_song['artist'][0]
-                else:
-                    artist = gv_mpd_client_song['artist']
-                dashboard_str += (
-                        '<img class="card-img-top" src="%s" alt="album art">'
-                        '<p>'
-                        '<center>'
-                        '<h5 class="card-title">%s</h5>'
-                        '<h6 class="card-subitle mb-2 text-muted">%s - %s</h6>'
-                        '</center>'
-                        '</p>'
-                        ) % (
-                                albumart_url,
-                                gv_mpd_client_song['title'],
-                                artist,
-                                gv_mpd_client_song['album'],
-                                )
-    else:
-        # no status
-        # just report something
-        dashboard_str += (
-                '<br>'
-                '<center>'
-                '<h4 class="card-title">Updating...</h4>'
-                '</center>'
-                ) 
+    # action code for selecting a cast mode
+    action_str = change_get_reload_template
+    action_str = action_str.replace('__ID__', 'castMode')
+    jquery_str += action_str
 
     # Close outer dv
     dashboard_str += (
@@ -614,11 +398,11 @@ def build_cast_web_page(refresh_interval = 10000):
     # Final web page construction
     # refresh timer based on arg passed in to the function
     web_page_str = web_page_tmpl
-    web_page_str = web_page_str.replace("__TITLE__", "mpd2chromecast Control Panel")
-    web_page_str = web_page_str.replace("__ACTION_FUNCTIONS__", jquery_str)
-    web_page_str = web_page_str.replace("__DASHBOARD__", dashboard_str)
-    web_page_str = web_page_str.replace("__REFRESH_URL__", "/cast")
-    web_page_str = web_page_str.replace("__RELOAD__", str(refresh_interval))
+    web_page_str = web_page_str.replace('__TITLE__', 'mpd2chromecast Control Panel')
+    web_page_str = web_page_str.replace('__ACTION_FUNCTIONS__', jquery_str)
+    web_page_str = web_page_str.replace('__DASHBOARD__', dashboard_str)
+    web_page_str = web_page_str.replace('__REFRESH_URL__', '/cast')
+    web_page_str = web_page_str.replace('__RELOAD__', str(refresh_interval))
 
     return web_page_str
 
@@ -633,27 +417,15 @@ class cast_handler(object):
 
     def index(
             self, 
-            chromecast = None, 
-            playback = None, 
-            seek = None, 
-            volume = None, 
-            playlist = None, 
-            song = None,
-            shuffle = None,
-            repeat = None,
-            consume = None):
+            castDevice = None,
+            castMode = None):
 
-        global gv_chromecast_name
-        global gv_mpd_client
-        global gv_mpd_client_status
-        global gv_mpd_client_song
-        global gv_mpd_playlists
-        global gv_mpd_queue
         global gv_verbose
+        global gv_cfg_dict
 
         log_message(
                 gv_verbose,
-                "/cast API %s params:%s" % (
+                '/cast API %s params:%s' % (
                     cherrypy.request.remote.ip,
                     cherrypy.request.params))
 
@@ -664,120 +436,30 @@ class cast_handler(object):
         else:
             refresh_interval = 10000
 
-        if chromecast:
+        save_required = False
+
+        if castDevice:
             log_message(
                     gv_verbose,
-                    '/cast chromecast -> %s' % (
-                        chromecast))
+                    '/cast device -> %s' % (
+                        castDevice))
 
-            # Make change instantly
-            gv_chromecast_name = chromecast
+            # Make change instantly and save
+            gv_cfg_dict['castDevice'] = castDevice
+            save_required = True
 
-            # Also update config to make chanfge persistent
-            home = os.path.expanduser("~")
-            cfg_file = open(home + '/.castrc', 'w') 
-            json_cfg = {}
-            json_cfg['chromecast'] = chromecast
-            cfg_file.write('%s\n' % (json.dumps(json_cfg)))
-            cfg_file.close()
-
-        if playback:
+        if castMode:
             log_message(
                     gv_verbose,
-                    '/cast playback %s' % (
-                        playback))
-            if gv_mpd_client:
-                if playback == 'prev':
-                    gv_mpd_client.previous()
-                elif playback == 'next':
-                    gv_mpd_client.next()
-                elif playback == 'play':
-                    # doubles as play/pause toggle
-                    gv_mpd_client.pause()
+                    '/cast mode -> %s' % (
+                        castMode))
 
-                    # best effort sly toggle on state
-                    # ro get returned web content updated
-                    if gv_mpd_client_status:
-                        if gv_mpd_client_status['state'] == 'play':
-                            gv_mpd_client_status['state'] = 'pause'
-                        else:
-                            gv_mpd_client_status['state'] = 'play'
+            # Make change instantly and save
+            gv_cfg_dict['castMode'] = castMode
+            save_required = True
 
-        if seek:
-            log_message(
-                    gv_verbose,
-                    '/cast seek %s' % (
-                        seek))
-            if gv_mpd_client:
-                gv_mpd_client.seekcur(seek)
-
-
-        if volume:
-            log_message(
-                    gv_verbose,
-                    '/cast volume %s' % (
-                        volume))
-            if gv_mpd_client:
-                gv_mpd_client.setvol(volume)
-
-                if gv_mpd_client_status:
-                    gv_mpd_client_status['volume'] = volume
-
-        if playlist:
-            log_message(
-                    gv_verbose,
-                    '/cast playlist %s' % (
-                        playlist))
-            if gv_mpd_client:
-                gv_mpd_client.clear()
-                gv_mpd_client.load(playlist)
-                gv_mpd_client.play(0)
-                # force queue reload in mpd_agent()
-                gv_mpd_queue = None 
-
-        if song:
-            log_message(
-                    gv_verbose,
-                    '/cast song %s' % (
-                        song))
-            if gv_mpd_client:
-                gv_mpd_client.playid(int(song))
-
-                # force current song to show selected song
-                gv_mpd_client_song['id'] = song
-
-        if shuffle:
-            log_message(
-                    gv_verbose,
-                    '/cast shuffle %s' % (
-                        shuffle))
-            if gv_mpd_client:
-                gv_mpd_client.random(int(shuffle))
-
-                if gv_mpd_client_status:
-                    gv_mpd_client_status['random'] = shuffle
-
-        if repeat:
-            log_message(
-                    gv_verbose,
-                    '/cast repeat %s' % (
-                        repeat))
-            if gv_mpd_client:
-                gv_mpd_client.repeat(int(repeat))
-
-                if gv_mpd_client_status:
-                    gv_mpd_client_status['repeat'] = repeat
-
-        if consume:
-            log_message(
-                    gv_verbose,
-                    '/cast consume %s' % (
-                        consume))
-            if gv_mpd_client:
-                gv_mpd_client.consume(int(consume))
-
-                if gv_mpd_client_status:
-                    gv_mpd_client_status['consume'] = consume
+        if save_required:
+            save_config()
 
         return build_cast_web_page(refresh_interval)
 
@@ -803,22 +485,22 @@ def web_server():
     cherrypy.server.socket_host = '0.0.0.0'
     cherrypy.server.socket_port = gv_cast_port
 
-    # webhook for audio streaming
-    # set up for directory serving
-    # via /var/lib/mpd/music
+    # /cast API
+    # mapped to /cast and /
+    cast_conf = {}
+    cherrypy.tree.mount(cast_handler(), '/cast', cast_conf)
+    cherrypy.tree.mount(cast_handler(), '/', cast_conf)
+
+    # /music handler for streaming
+    # and artwork
     stream_conf = {
-        '/music' : {
+        '/' : {
             'tools.staticdir.on': True,
             'tools.staticdir.dir': gv_mpd_music_dir,
             'tools.staticdir.index': 'index.html',
         }
     }
-
-    # Nothing special in play for the /cast API
-    cast_conf = {}
-
-    cherrypy.tree.mount(stream_handler(), '/', stream_conf)
-    cherrypy.tree.mount(cast_handler(), '/cast', cast_conf)
+    cherrypy.tree.mount(stream_handler(), '/music', stream_conf)
 
     # Cherrypy main loop blocking
     cherrypy.engine.start()
@@ -833,20 +515,18 @@ def mpd_file_to_url(mpd_file):
     # URL will start with http
     if mpd_file.startswith('http'):
         cast_url = mpd_file
-        type = "audio/mp3"
+        type = 'audio/mp3'
     else:
         # Format file URL as path from our web server
         # mpd_file path is also made web-safe
-        cast_url = "http://%s:%d/music/%s" % (
+        cast_url = 'http://%s:%d/music/%s' % (
                 gv_server_ip,
                 gv_cast_port,
                 urllib.parse.quote(mpd_file))
 
         # Split out extension of file
-        # probably not necessary as chromecast seems to work it
-        # out itself
         file, ext = os.path.splitext(mpd_file)
-        type = "audio/%s" % (ext.replace('.', ''))
+        type = 'audio/%s' % (ext.replace('.', ''))
 
     return (cast_url, type)
 
@@ -877,7 +557,7 @@ def get_albumart_url(mpd_file):
         cover_file = str(mpd_full_path.parent / name)
         cover_rel_file = str(mpd_rel_path.parent / name)
         if os.path.exists(cover_file):
-            albumart_url = "http://%s:%d/music/%s" % (
+            albumart_url = 'http://%s:%d/music/%s' % (
                     gv_server_ip,
                     gv_cast_port,
                     urllib.parse.quote(cover_rel_file))
@@ -886,26 +566,21 @@ def get_albumart_url(mpd_file):
     return albumart_url
 
 
-def mpd_agent():
+def mpd_file_agent():
     global gv_server_ip
-    global gv_chromecast_name
     global gv_verbose
     global gv_mpd_agent_timestamp
-    global gv_mpd_client
-    global gv_mpd_client_status
-    global gv_mpd_client_song
-    global gv_mpd_playlists
-    global gv_mpd_queue
+    global gv_cfg_dict
 
     now = int(time.time())
 
     # MPD inits
-    gv_mpd_client = None
+    mpd_client = None
     mpd_last_status = now
 
     # Cast state inits
     cast_device = None # initial state
-    cast_name = ""
+    cast_name = ''
     cast_status = 'none'
     cast_id = -1
     cast_volume = 0
@@ -915,8 +590,12 @@ def mpd_agent():
 
     loop_count = -1
     
-    while (1):
+    while (True):
         loop_count += 1
+
+        if gv_cfg_dict['castMode'] != 'direct':
+            log_message(1, 'Exiting MPD File agent (config change)')
+            return
 
         # 1 sec delay per iteration
         time.sleep(1)
@@ -932,65 +611,40 @@ def mpd_agent():
         if now - mpd_last_status > 60:
             log_message(
                     1,
-                    "No MPD contact in 60 seconds... exiting")
+                    'No MPD contact in 60 seconds... exiting')
             return
 
-        if not gv_mpd_client:
+        if not mpd_client:
             log_message(
                     1,
                     'Connecting to MPD...')
             try:
-                gv_mpd_client = mpd.MPDClient()
-                gv_mpd_client.connect("localhost", 6600)
+                mpd_client = mpd.MPDClient()
+                mpd_client.connect('localhost', 6600)
             except:
                 log_message(
                         1,
                         'Problem getting mpd client')
-                gv_mpd_client = None
+                mpd_client = None
                 continue
 
         # Get current MPD status details
         try:
-            gv_mpd_client_status = gv_mpd_client.status()
-            gv_mpd_client_song = gv_mpd_client.currentsong()
+            mpd_client_status = mpd_client.status()
+            mpd_client_song = mpd_client.currentsong()
 
             log_message(
                     gv_verbose,
                     'MPD Status:\n%s' % (
                         json.dumps(
-                            gv_mpd_client_status, 
+                            mpd_client_status, 
                             indent = 4)))
             log_message(
                     gv_verbose,
                     'MPD Current Song:\n%s' % (
                         json.dumps(
-                            gv_mpd_client_song, 
+                            mpd_client_song, 
                             indent = 4)))
-
-            # Only extract playlists and queue once every 
-            # 30 secnds or when forced by a playlist change
-            # it's too much of a strain to do this every second
-            if (loop_count % 30 == 0 or 
-                    gv_mpd_queue is None):
-                log_message(
-                        1,
-                        'Loading playlists and queue')
-                gv_mpd_playlists = gv_mpd_client.listplaylists()
-                gv_mpd_queue = gv_mpd_client.playlistinfo()
-
-                log_message(
-                        gv_verbose,
-                        'MPD Playlists:\n%s' % (
-                            json.dumps(
-                                gv_mpd_playlists, 
-                                indent = 4)))
-
-                log_message(
-                        gv_verbose,
-                        'MPD Queue:\n%s' % (
-                            json.dumps(
-                                gv_mpd_queue, 
-                                indent = 4)))
 
             mpd_last_status = now
 
@@ -999,16 +653,14 @@ def mpd_agent():
             log_message(
                     1,
                     'Problem getting mpd status')
-            gv_mpd_client = None
-            gv_mpd_client_status = None
-            gv_mpd_client_song = None
-            gv_mpd_playlists = None
-            gv_mpd_queue = None
+            mpd_client = None
+            mpd_client_status = None
+            mpd_client_song = None
             continue
 
         # sanity check on status
         # as it can come back empty
-        if len(gv_mpd_client_status) == 0:
+        if len(mpd_client_status) == 0:
             log_message(
                     1,
                     'Problem getting mpd status')
@@ -1017,17 +669,17 @@ def mpd_agent():
         # Start with the current playing/selected file
         mpd_file = None
         mpd_id = -1
-        if ('file' in gv_mpd_client_song and 
-                gv_mpd_client_song['file']):
-            mpd_file = gv_mpd_client_song['file']
-            mpd_id = gv_mpd_client_song['id']
+        if ('file' in mpd_client_song and 
+                mpd_client_song['file']):
+            mpd_file = mpd_client_song['file']
+            mpd_id = mpd_client_song['id']
 
         # mandatory fields
-        mpd_status = gv_mpd_client_status['state']
+        mpd_status = mpd_client_status['state']
 
         # optional fields
-        if 'volume' in gv_mpd_client_status:
-            mpd_volume = int(gv_mpd_client_status['volume'])
+        if 'volume' in mpd_client_status:
+            mpd_volume = int(mpd_client_status['volume'])
         else:
             mpd_volume = -1 # used to track unknown value
 
@@ -1035,23 +687,23 @@ def mpd_agent():
         mpd_elapsed = 0
         mpd_duration = 0
 
-        if 'elapsed' in gv_mpd_client_status:
-            mpd_elapsed = int(float(gv_mpd_client_status['elapsed']))
-        if 'duration' in gv_mpd_client_status:
-            mpd_duration = int(float(gv_mpd_client_status['duration']))
+        if 'elapsed' in mpd_client_status:
+            mpd_elapsed = int(float(mpd_client_status['elapsed']))
+        if 'duration' in mpd_client_status:
+            mpd_duration = int(float(mpd_client_status['duration']))
 
         artist = ''
         album = ''
         title = ''
-        if 'artist' in gv_mpd_client_song:
-            artist = gv_mpd_client_song['artist']
+        if 'artist' in mpd_client_song:
+            artist = mpd_client_song['artist']
             # Take first artist if is a list
             if type(artist) == list:
                 artist = artist[0]
-        if 'album' in gv_mpd_client_song:
-            album = gv_mpd_client_song['album']
-        if 'title' in gv_mpd_client_song:
-            title = gv_mpd_client_song['title']
+        if 'album' in mpd_client_song:
+            album = mpd_client_song['album']
+        if 'title' in mpd_client_song:
+            title = mpd_client_song['title']
 
         # MPD Elapsed time and progress
         mpd_elapsed_mins = int(mpd_elapsed / 60)
@@ -1065,14 +717,14 @@ def mpd_agent():
 
         log_message(
                 1,
-                "Current Track:%s/%s/%s" % (
+                'Current Track:%s/%s/%s' % (
                     artist,
                     album,
                     title))
 
         log_message(
                 1,
-                "MPD (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
+                'MPD (%s) vol:%s %d:%02d/%d:%02d [%02d%%]' % (
                     mpd_status,
                     'N/A' if mpd_volume == -1 else mpd_volume,
                     mpd_elapsed_mins,
@@ -1081,10 +733,10 @@ def mpd_agent():
                     mpd_duration_secs,
                     mpd_progress))
 
-        # Chromecast Status
+        # Cast Device Status
         if (cast_device):
 
-            # We need an updated status from the Chromecast
+            # We need an updated status from the Cast Device
             # This can fail sometimes when nothing is really wrong and 
             # then other times when things are wrong :)
             #
@@ -1097,14 +749,14 @@ def mpd_agent():
                 cast_failed_update_count += 1
                 log_message(
                         1,
-                        "Failed to get chromecast status... %d/%d" % (
+                        'Failed to get cast device status... %d/%d' % (
                             cast_failed_update_count,
                             max_cast_failed_updates))
 
                 if (cast_failed_update_count >= max_cast_failed_updates):
                     log_message(
                             1,
-                            "Detected broken controller after %d status failures" % (
+                            'Detected broken controller after %d status failures' % (
                                 max_cast_failed_updates))
                     cast_device = None
                     cast_status = 'none'
@@ -1132,7 +784,7 @@ def mpd_agent():
 
             log_message(
                     1,
-                    "%s (%s) vol:%s %d:%02d/%d:%02d [%02d%%]" % (
+                    '%s (%s) [file] vol:%s %d:%02d/%d:%02d [%02d%%]' % (
                         cast_name,
                         cast_status,
                         'N/A' if mpd_volume == -1 else cast_volume,
@@ -1143,17 +795,17 @@ def mpd_agent():
                         cast_progress))
 
 
-        # Configured Chromecast change
+        # Configured Cast Device change
         # Clear existing device handle
-        if (cast_name != gv_chromecast_name):
+        if (cast_name != gv_cfg_dict['castDevice']):
             # Stop media player of existing device
             # if it exists
             if (cast_device):
                 log_message(
                         1,
-                        "Detected Chromecast change from %s -> %s" % (
+                        'Detected Cast Device change from %s -> %s' % (
                             cast_name,
-                            gv_chromecast_name))
+                            gv_cfg_dict['castDevice']))
                 cast_device.media_controller.stop()
                 cast_device.quit_app()
                 cast_status = mpd_status
@@ -1161,25 +813,9 @@ def mpd_agent():
                 cast_volume = 0
                 continue
 
-        # Stop event
-        # stop and quit chromecast app
-        if (cast_status != 'stop' and 
-            mpd_status == 'stop' and
-            cast_device):
-
-            log_message(
-                    1,
-                    "Stopping Chromecast")
-            cast_device.media_controller.stop()
-            cast_device.quit_app()
-            cast_status = mpd_status
-            cast_device = None
-            cast_volume = 0
-            continue  
-
-        # Chromecast URL for media
-        # no point going any further if we 
-        # have no file to play
+        # Cast Device URL for media
+        # derived into a file URL (streaming)
+        # or fixed MPD output stream
         if mpd_file:
             cast_url, cast_file_type = mpd_file_to_url(mpd_file)
         else:
@@ -1190,8 +826,8 @@ def mpd_agent():
         # no device curently present
         if (mpd_status == 'play' and 
                 not cast_device):
-            cast_device = get_chromecast(gv_chromecast_name)
-            cast_name = gv_chromecast_name
+            cast_device = get_cast_device(gv_cfg_dict['castDevice'])
+            cast_name = gv_cfg_dict['castDevice']
 
             # nothing to do if this fails
             if not cast_device:
@@ -1201,13 +837,13 @@ def mpd_agent():
             if not cast_device.is_idle:
                 log_message(
                         1,
-                        "Killing current running cast app")
+                        'Killing current running cast app')
                 cast_device.quit_app()
 
             while not cast_device.is_idle:
                 log_message(
                         1,
-                        "Waiting for cast device to get ready...")
+                        'Waiting for cast device to get ready...')
                 time.sleep(1)
 
             # Cast state inits
@@ -1217,38 +853,13 @@ def mpd_agent():
             continue
 
 
-        # MPD -> Chromecast Events
+        # MPD -> Cast Device Events
         # Anything that is driven from detecting changes
-        # on the MPD side and pushing to the Chromecast
+        # on the MPD side and pushing to the Cast Device
 
         # Nothing to do if we don't have a cast
         # device handle
         if (not cast_device):
-            continue
-
-        # Initial Cast protection for file streaming
-        # After an initial cast we pause MPD 
-        # only unpausing and re-seeking to 
-        # cast_elapsed - 1 when the 
-        # chromecast is reporting elapsed time
-        # Does not apply for radio streams
-        if (not mpd_file.startswith('http') and 
-                not cast_confirmed and 
-                mpd_status == 'pause' and 
-                cast_status == 'play'):
-            if (cast_elapsed == 0):
-                log_message(
-                        1,
-                        'Initial cast... Waiting for chromecast elapsed time')
-            else:
-                log_message(
-                        1,
-                        'Initial cast... elapsed time detected.. Unpausing mpd')
-                # sync 1 second behind
-                gv_mpd_client.seekcur(cast_elapsed - 1)
-                # play (pause 0)
-                gv_mpd_client.pause(0)
-                cast_confirmed = True
             continue
 
         # Volume change only while playing
@@ -1258,10 +869,51 @@ def mpd_agent():
 
             log_message(
                     1,
-                    "Setting Chromecast Volume: %d" % (mpd_volume))
-            # Chromecast volume is 0.0 - 1.0 (divide by 100)
+                    'Setting Cast Device Volume: %d' % (mpd_volume))
+            # Cast Device volume is 0.0 - 1.0 (divide by 100)
             cast_device.set_volume(mpd_volume / 100)
             cast_volume = mpd_volume
+            continue
+
+        # Stop event
+        # stop and quit cast app
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop' and
+            cast_device):
+
+            log_message(
+                    1,
+                    'Stopping Cast App')
+            cast_device.media_controller.stop()
+            cast_device.quit_app()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
+
+        # Initial Cast protection for file streaming
+        # After an initial cast we pause MPD 
+        # only unpausing and re-seeking to 
+        # cast_elapsed - 1 when the 
+        # cast device is reporting elapsed time
+        # Does not apply for radio streams
+        if (not mpd_file.startswith('http') and 
+                not cast_confirmed and 
+                mpd_status == 'pause' and 
+                cast_status == 'play'):
+            if (cast_elapsed == 0):
+                log_message(
+                        1,
+                        'Initial cast... Waiting for cast device elapsed time')
+            else:
+                log_message(
+                        1,
+                        'Initial cast... elapsed time detected.. Unpausing mpd')
+                # sync 1 second behind
+                mpd_client.seekcur(cast_elapsed - 1)
+                # play (pause 0)
+                mpd_client.pause(0)
+                cast_confirmed = True
             continue
 
         # Pause
@@ -1270,7 +922,7 @@ def mpd_agent():
 
             log_message(
                     1,
-                    "Pausing Chromecast")
+                    'Pausing Cast Device')
             cast_device.media_controller.pause()
             cast_status = mpd_status
             continue
@@ -1287,16 +939,16 @@ def mpd_agent():
 
             log_message(
                     1,
-                    "Unpause Chromecast")
+                    'Unpause Cast Device')
             cast_device.media_controller.play()
             cast_status = mpd_status
             continue
         
         # Play a song/stream or next in playlist
         # triggered by:
-        # 1) different play states between mpd and chromecast,
+        # 1) different play states between mpd and cast device,
         # 2) different mpd/cast IDs (playlist change)
-        # 3) chromecast is IDLE and mpd_elapsed at 0 (repeat same track)
+        # 3) cast device is IDLE and mpd_elapsed at 0 (repeat same track)
         if (mpd_status == 'play' and 
                 (cast_status != 'play' or 
                     mpd_id != cast_id or 
@@ -1305,7 +957,7 @@ def mpd_agent():
 
             log_message(
                     1,
-                    "Casting URL:%s type:%s" % (
+                    'Casting URL:%s type:%s' % (
                         cast_url,
                         cast_file_type))
 
@@ -1319,7 +971,7 @@ def mpd_agent():
                 args['thumb'] = albumart_url
                 log_message(
                         1,
-                        "Albumart URL:%s" % (
+                        'Albumart URL:%s' % (
                             albumart_url))
 
             # Let the magic happen
@@ -1334,8 +986,8 @@ def mpd_agent():
                 # they sync up
                 log_message(
                         1,
-                        "Setting Chromecast Volume: %d" % (mpd_volume))
-                # Chromecast volume is 0.0 - 1.0 (divide by 100)
+                        'Setting Cast Device Volume: %d' % (mpd_volume))
+                # Cast Device volume is 0.0 - 1.0 (divide by 100)
                 cast_device.set_volume(mpd_volume / 100)
                 cast_volume = mpd_volume
 
@@ -1353,17 +1005,16 @@ def mpd_agent():
             if (not mpd_file.startswith('http')):
                 log_message(
                         1,
-                        "Pausing MPD (initial cast)")
-                gv_mpd_client.pause(1)
-                gv_mpd_client.seekcur(0)
+                        'Pausing MPD (initial cast)')
+                mpd_client.pause(1)
+                mpd_client.seekcur(0)
                 cast_confirmed = False
 
             # no more to do until next loop
             continue
-  
 
         # Detect a skip on MPD and issue a seek request on 
-        # the chromecast.
+        # the cast device.
         #
         # Make sure the cast is confirmed and only perform the
         # seek if there is a difference of min 10 seconds
@@ -1377,17 +1028,17 @@ def mpd_agent():
                 abs(mpd_elapsed - cast_elapsed) >= 10):
             log_message(
                     1,
-                    "Sync MPD elapsed %d secs to Chromecast" % (
+                    'Sync MPD elapsed %d secs to Cast Device' % (
                         mpd_elapsed))
             cast_device.media_controller.seek(mpd_elapsed)
             continue 
     
-        # Every 10 seconds sync Chromecast playback 
+        # Every 10 seconds sync cast device playback 
         # back to MPD elapsed time if mpd
         # is at the same time or further on.
         # Radio streams ignored for this.
         # The value we then set on mpd is 1 second 
-        # behind the chromecast elapsed time.
+        # behind the cast device elapsed time.
         if (not mpd_file.startswith('http') and
                 mpd_status == 'play' and 
                 cast_elapsed > 0 and 
@@ -1396,16 +1047,428 @@ def mpd_agent():
                     mpd_elapsed < cast_elapsed - 1)):
                 log_message(
                         1,
-                        "Sync Chromecast elapsed %d secs to MPD" % (
+                        'Sync Cast Device elapsed %d secs to MPD' % (
                             cast_elapsed))
 
                 # Value for seek is 1 second behind
-                gv_mpd_client.seekcur(cast_elapsed - 1)
+                mpd_client.seekcur(cast_elapsed - 1)
 
-# main
+
+def mpd_stream_agent():
+    global gv_server_ip
+    global gv_verbose
+    global gv_mpd_agent_timestamp
+    global gv_cfg_dict
+
+    now = int(time.time())
+
+    # MPD inits
+    mpd_client = None
+    mpd_last_status = now
+
+    # Cast state inits
+    cast_device = None # initial state
+    cast_name = ''
+    cast_status = 'none'
+    cast_audio_format = 'none'
+    cast_id = -1
+    cast_volume = 0
+    cast_confirmed = False
+    cast_failed_update_count = 0
+    max_cast_failed_updates = 20
+    cast_nudge_count = 0
+    max_cast_nudges = 10
+
+    loop_count = -1
+
+    # Fixed stream details
+    cast_url = 'http://%s:8000/' % (gv_server_ip)
+    cast_file_type = 'audio/flac'
+    
+    while (True):
+        if gv_cfg_dict['castMode'] != 'mpd':
+            log_message(1, 'Exiting MPD Stream agent (config change)')
+            return
+
+        loop_count += 1
+
+        # 1 sec delay per iteration
+        time.sleep(1)
+
+        print() # log output separator
+        now = int(time.time())
+
+        # Timestamp loop activity for MPD agent
+        # acts as a deadlock detection in main loop
+        gv_mpd_agent_timestamp = now
+
+        if not mpd_client:
+            log_message(
+                    1,
+                    'Connecting to MPD...')
+            try:
+                mpd_client = mpd.MPDClient()
+                mpd_client.connect('localhost', 6600)
+            except:
+                log_message(
+                        1,
+                        'Problem getting mpd client')
+                mpd_client = None
+                continue
+
+        # Get current MPD status details
+        try:
+            mpd_client_status = mpd_client.status()
+            mpd_client_song = mpd_client.currentsong()
+
+            log_message(
+                    gv_verbose,
+                    'MPD Status:\n%s' % (
+                        json.dumps(
+                            mpd_client_status, 
+                            indent = 4)))
+            log_message(
+                    gv_verbose,
+                    'MPD Current Song:\n%s' % (
+                        json.dumps(
+                            mpd_client_song, 
+                            indent = 4)))
+
+            mpd_last_status = now
+
+        except:
+            # reset... and let next loop reconect
+            log_message(
+                    1,
+                    'Problem getting mpd status')
+            mpd_client = None
+            mpd_client_status = None
+            continue
+
+        # sanity check on status
+        # as it can come back empty
+        if len(mpd_client_status) == 0:
+            log_message(
+                    1,
+                    'Problem getting mpd status')
+            continue
+
+        # mandatory fields
+        mpd_status = mpd_client_status['state']
+
+        # optional fields
+        if 'volume' in mpd_client_status:
+            mpd_volume = int(mpd_client_status['volume'])
+        else:
+            mpd_volume = -1 # used to track unknown value
+
+        # optionals (will depend on given state and stream vs file
+        mpd_elapsed = 0
+        mpd_duration = 0
+
+        if 'elapsed' in mpd_client_status:
+            mpd_elapsed = int(float(mpd_client_status['elapsed']))
+        if 'duration' in mpd_client_status:
+            mpd_duration = int(float(mpd_client_status['duration']))
+
+        artist = ''
+        album = ''
+        title = ''
+        if 'artist' in mpd_client_song:
+            artist = mpd_client_song['artist']
+            # Take first artist if is a list
+            if type(artist) == list:
+                artist = artist[0]
+        if 'album' in mpd_client_song:
+            album = mpd_client_song['album']
+        if 'title' in mpd_client_song:
+            title = mpd_client_song['title']
+
+        # MPD Elapsed time and progress
+        mpd_elapsed_mins = int(mpd_elapsed / 60)
+        mpd_elapsed_secs = mpd_elapsed % 60
+        mpd_duration_mins = int(mpd_duration / 60)
+        mpd_duration_secs = mpd_duration % 60
+        if mpd_duration > 0:
+            mpd_progress = int(mpd_elapsed / mpd_duration * 100)
+        else:
+            mpd_progress = 0
+
+        if 'audio' in mpd_client_status:
+            mpd_audio_format = mpd_client_status['audio']
+        else:
+            mpd_audio_format = None
+
+        log_message(
+                1,
+                'Current Track:%s/%s/%s' % (
+                    artist,
+                    album,
+                    title))
+
+        log_message(
+                1,
+                'MPD (%s) vol:%s %d:%02d/%d:%02d [%02d%%]' % (
+                    mpd_status,
+                    'N/A' if mpd_volume == -1 else mpd_volume,
+                    mpd_elapsed_mins,
+                    mpd_elapsed_secs,
+                    mpd_duration_mins,
+                    mpd_duration_secs,
+                    mpd_progress))
+
+        # Cast Device Status
+        if (cast_device):
+
+            # We need an updated status from the Cast Device
+            # This can fail sometimes when nothing is really wrong and 
+            # then other times when things are wrong :)
+            #
+            # So we give it a tolerance of 20 consecutive failures
+            try:
+                cast_device.media_controller.update_status()
+                # Reset failed status count
+                cast_failed_update_count = 0
+            except:
+                cast_failed_update_count += 1
+                log_message(
+                        1,
+                        'Failed to get cast device status... %d/%d' % (
+                            cast_failed_update_count,
+                            max_cast_failed_updates))
+
+                if (cast_failed_update_count >= max_cast_failed_updates):
+                    log_message(
+                            1,
+                            'Detected broken controller after %d status failures' % (
+                                max_cast_failed_updates))
+                    cast_device = None
+                    cast_status = 'none'
+                    cast_id = -1
+                    cast_volume = 0
+                    cast_failed_update_count = 0
+                    continue
+
+            # Elapsed time as reported by the cast device
+            cast_elapsed = int(cast_device.media_controller.status.current_time)
+            # Cast player state as reported by the device
+            cast_player_state = cast_device.media_controller.status.player_state
+
+            cast_elapsed_mins = int(cast_elapsed / 60)
+            cast_elapsed_secs = cast_elapsed % 60
+
+            log_message(
+                    1,
+                    '%s (%s) [mpd stream] vol:%s %d:%02d' % (
+                        cast_name,
+                        cast_status,
+                        'N/A' if mpd_volume == -1 else cast_volume,
+                        cast_elapsed_mins,
+                        cast_elapsed_secs))
+
+
+        # Configured Cast Device change
+        # Clear existing device handle
+        if (cast_name != gv_cfg_dict['castDevice']):
+            # Stop media player of existing device
+            # if it exists
+            if (cast_device):
+                log_message(
+                        1,
+                        'Detected Cast Device change from %s -> %s' % (
+                            cast_name,
+                            gv_cfg_dict['castDevice']))
+                cast_device.media_controller.stop()
+                cast_device.quit_app()
+                cast_status = mpd_status
+                cast_device = None
+                cast_volume = 0
+                continue
+
+
+
+        # Get cast device when in play state and 
+        # no device curently present
+        if (mpd_status == 'play' and 
+                gv_cfg_dict['castDevice'] != 'Disabled' and 
+                not cast_device):
+            cast_device = get_cast_device(gv_cfg_dict['castDevice'])
+
+            # nothing to do if this fails
+            if not cast_device:
+                continue
+
+            cast_name = gv_cfg_dict['castDevice']
+            cast_device.wait()
+            force_cast = True
+
+            # Volume sync before we cast
+            if (cast_volume != mpd_volume and
+                    mpd_volume != -1):
+                # Set volume to match local MPD volume
+                # avoids sudden volume changes after playback starts when 
+                # they sync up
+                log_message(
+                        1,
+                        'Setting Cast Device Volume: %d' % (mpd_volume))
+                # Cast Device volume is 0.0 - 1.0 (divide by 100)
+                cast_device.set_volume(mpd_volume / 100)
+                cast_volume = mpd_volume
+
+        # MPD audio PCM change
+        # simply forces a recast
+        if (mpd_audio_format and cast_device and 
+                mpd_audio_format != cast_audio_format):
+            log_message(
+                    1,
+                    'Forcing recast.. PCM audio change from %s -> %s' % (
+                        cast_audio_format, 
+                        mpd_audio_format)
+                    )
+            force_cast = True
+
+            # Also rewind track to start
+            # We can lose 1-2 seconds playback otherwise
+            mpd_client.seekcur(0)
+
+        # MPD -> Cast Device Events
+        # Anything that is driven from detecting changes
+        # on the MPD side and pushing to the Cast Device
+
+        # Nothing to do if we don't have a cast
+        # device handle
+        if (not cast_device):
+            continue
+
+        if force_cast:
+            # MPD streaming URL
+            log_message(
+                    1,
+                    'casting mpd url:%s type:%s' % (
+                        cast_url,
+                        cast_file_type))
+
+            args = {}
+            args['content_type'] = cast_file_type
+            args['title'] = 'mpd2chromecast'
+            #args['autoplay'] = true
+
+            # initiate the cast
+            cast_device.media_controller.play_media(
+                    cast_url, 
+                    **args)
+            cast_status = mpd_status
+            cast_audio_format = mpd_audio_format
+            force_cast = False
+            continue
+
+        # Volume change only while playing
+        if (cast_status == 'play' and 
+                mpd_volume != -1 and 
+                cast_volume != mpd_volume):
+
+            log_message(
+                    1,
+                    'Setting Cast Device Volume: %d' % (mpd_volume))
+            # Cast Device volume is 0.0 - 1.0 (divide by 100)
+            cast_device.set_volume(mpd_volume / 100)
+            cast_volume = mpd_volume
+            continue
+
+        # Gentle play nudge on stream
+        # if elapsed time is not incrementing
+        if (cast_status == 'play' and 
+                mpd_status == 'play' and
+                cast_elapsed == 0):
+
+            # 5-second grace and we will force a recast
+            if cast_nudge_count >= max_cast_nudges:
+                log_message(
+                        1,
+                        'Forcing recast.. max nudge count %d exceeded' % (
+                            max_cast_nudges)
+                        )
+                force_cast = True
+                cast_nudge_count = 0
+                continue
+
+            # Normal nudge to try and get the stream playing
+            cast_nudge_count += 1
+            log_message(
+                    1,
+                    'Nudging cast device to play #%d/%d' % (
+                        cast_nudge_count,
+                        max_cast_nudges))
+            cast_device.media_controller.play()
+
+        # Nudge count reset
+        if (cast_status == 'play' and 
+                mpd_status == 'play' and
+                cast_elapsed > 0):
+            cast_nudge_count = 0
+
+        # Pause
+        if (cast_status != 'pause' and
+            mpd_status == 'pause'):
+
+            log_message(
+                    1,
+                    'Pausing Cast Device')
+            cast_device.media_controller.pause()
+            cast_status = mpd_status
+            continue
+        
+        # Resume play
+        if (cast_status == 'pause' and 
+            mpd_status == 'play'):
+
+            log_message(
+                    1,
+                    'Unpause Cast Device (recast stream)')
+            # force a recast
+            force_cast = True
+            continue
+
+        # Stop event
+        # stop and quit cast app
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop' and
+            cast_device):
+
+            log_message(
+                    1,
+                    'Stopping Cast App')
+            cast_device.media_controller.stop()
+            cast_device.quit_app()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
+
+
+def mpd_cast_wrapper_agent():
+    global gv_cfg_dict
+
+    while (True):
+
+        if gv_cfg_dict['castMode'] == 'direct':
+            # MPD File Agent
+            log_message(1, 'Starting MPD File Agent')
+            mpd_file_agent()
+            continue
+
+        if gv_cfg_dict['castMode'] == 'mpd':
+            # MPD Stream Agent
+            log_message(1, 'Starting MPD Stream Agent')
+            mpd_stream_agent()
+            continue
+
+        time.sleep(5)
+
+# main()
 
 parser = argparse.ArgumentParser(
-        description='MPD Chromecast Agent')
+        description='MPD Cast Device Agent')
 
 parser.add_argument(
         '--verbose', 
@@ -1418,65 +1481,68 @@ gv_verbose = args['verbose']
 
 # Determine the main IP address of the server
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.connect(("8.8.8.8", 80))
+s.connect(('8.8.8.8', 80))
 gv_server_ip = s.getsockname()[0]
 s.close()
 
 # Determine variant
 determine_platform_variant()
 
-# Thread management and main loop
-thread_list = []
-
-# Cherry Py web server
-web_server_t = threading.Thread(target = web_server)
-web_server_t.daemon = True
-web_server_t.start()
-thread_list.append(web_server_t)
-
-# MPD Agent
-mpd_t = threading.Thread(target = mpd_agent)
-mpd_t.daemon = True
-mpd_t.start()
-thread_list.append(mpd_t)
+# Thread management 
+executor = concurrent.futures.ThreadPoolExecutor(
+        max_workers = 20)
+future_dict = {}
 
 # Config Agent
-config_t = threading.Thread(target = config_agent)
-config_t.daemon = True
-config_t.start()
-thread_list.append(config_t)
+future_dict['Config Agent'] = executor.submit(
+        config_agent)
 
-# Chromecast Agent
-chromecast_t = threading.Thread(target = chromecast_agent)
-chromecast_t.daemon = True
-chromecast_t.start()
-thread_list.append(chromecast_t)
+# Cherry Py web server
+future_dict['Web Server'] = executor.submit(
+        web_server)
 
-while (1):
-    dead_threads = 0
-    for thread in thread_list:
-         if (not thread.isAlive()):
-             dead_threads += 1
+# Cast Device Discovery Agent
+future_dict['Cast Device Discovery Agent'] = executor.submit(
+        cast_device_discovery_agent)
 
-    if (dead_threads > 0):
+# MPD Cast Wrapper Agent
+future_dict['MPD Cast Wrapper Agent'] = executor.submit(
+        mpd_cast_wrapper_agent)
+
+# main loop
+while (True):
+    exception_dict = {}
+    log_message(
+            gv_verbose, 
+            'threads:%s' % (
+                future_dict)
+            )
+
+    for key in future_dict:
+        future = future_dict[key]
+        if future.done():
+            if future.exception():
+                exception_dict[key] = future.exception()
+
+    if (len(exception_dict) > 0):
         log_message(
                 1,
-                "Detected %d dead threads... exiting" % (
-                    dead_threads))
-        sys.exit(-1);
-
-    # MPD/Chromecast deadlock
+                'Exceptions Detected:\n%s' % (
+                    exception_dict)
+                )
+        os._exit(1) 
+    
+    # MPD/Cast Device deadlock
     # The MPD loop runs more or less on a 
     # 1-second interval. It will delay and 
     # potentially lock-up if either an MPD or pychromecast
-    # call goes bad. This will detect 60 seconds deadlock and exit
+    # call goes bad. This will detect 30 seconds deadlock and exit
     now = int(time.time())
     if (gv_mpd_agent_timestamp > 0 and 
-            now - gv_mpd_agent_timestamp >= 60):
+            now - gv_mpd_agent_timestamp >= 30):
         log_message(
                 1,
-                "Detected deadlocked MPD agent... exiting")
-        sys.exit(-1);
-
+                'Detected deadlocked MPD agent... exiting')
+        os._exit(1) 
+        
     time.sleep(5)
-
