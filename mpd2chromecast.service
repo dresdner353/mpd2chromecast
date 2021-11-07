@@ -3,9 +3,9 @@ Description=mpd2chromecast Cast Agent
 After=multi-user.target
 
 [Service]
-ExecStart=/usr/bin/python3 /home/pi/mpd2chromecast/mpd2chromecast.py
-User=pi
-Group=pi
+ExecStart=/usr/bin/python3 /home/__USER__/mpd2chromecast/mpd2chromecast.py
+User=__USER__
+Group=__USER__
 Restart=always
 StandardOutput=/dev/null
 StandardError=/dev/null
