@@ -97,7 +97,7 @@ The above will stop the background service and let you run the script directly o
 
 
 ## Configuring MPD Streaming (for DSP integration or gapless playback)
-If you're interested in gapless playback or leveraging any kind of DSP effects provided by moOde or Volumio, then you can use the following steps top get MPD streaming enabled. Once its up and running, when casting select the "Cast MPD Output Stream" to ensure that the MPD stream is cast instead of the file URL.
+If you're interested in gapless playback or leveraging any kind of DSP effects provided by moOde or Volumio, then you can use the following steps to get MPD streaming enabled. Once its up and running, when casting select the "Cast MPD Output Stream" to ensure that the MPD stream is cast instead of the file URL.
 
 ### moOde MPD Streaming
 Navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). Then click the set button to apply the change.
