@@ -53,7 +53,7 @@ The 2nd combo box (with play icon) can be used to toggle between two playback mo
 This is the default mode which serves the playing track file as a URL to the cast device. The end device will stream the selected file directly and perform all decoding. 
 
 * Cast MPD Output Stream (experimental)  
-This is experimental at present and only runs (easily) with moOde. To use this mode in moOde, you need to navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). When you select this streaming mode in mpd2chromecast, it passes the fixed URL ```http://<IP>:8000``` to the selected cast device. The end result is that the stream being played is the output stream from MPD and not the original file. This allows for integration of DSP modes in MPD, crossfade and even gapless playback. It's not perfect and mileage may vary depending on how well your network works. 
+This is experimental at present and can be enabled easily with moOde and with a bit more work on Volumio. When you select this streaming mode, it passes the fixed URL ```http://<IP>:8000``` to the selected cast device. The end result is that the stream being played is the output stream from MPD and not the original file. This allows for integration of DSP modes in MPD, crossfade and even gapless playback. It's not perfect and mileage may vary depending on how well your network works. See below on how to enable this in moOde or Volumio.
 
 ## Enabling/Disabling the Service and Troubleshooting
 To see the running script. ssh into the pi and run:
@@ -95,6 +95,42 @@ python3 mpd2chromecast/mpd2chromecast.py
 ```
 The above will stop the background service and let you run the script directly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command even redirect it to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
 
+
+## Configuring MPD Streaming (for DSP integration or gapless playback)
+If you're interested in gapless playback or leveraging any kind of DSP effects provided by moOde or Volumio, then you can use the following steps top get MPD streaming enabled. Once its up and running, when casting select the "Cast MPD Output Stream" to ensure that the MPD stream is cast instead of the file URL.
+
+### moOde MPD Streaming
+Navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). Then click the set button to apply the change.
+![Cast Control Web Interface](./moode_mpd_streaming_setup.jpg)
+
+### Volumio MPD Streaming
+With Volumio, its a bit of command line lifting:
+
+```
+ssh volumio@volumio.local
+sudo nano /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl
+```
+Then paste in the following in the audio output section:
+
+```
+audio_output {
+    type "httpd"
+    name "HTTP Server"
+    port "8000"
+    encoder "flac"
+    compression "0"
+    tags "yes"
+    always_on "yes"
+}
+```
+
+Ctrl-X and enter y to save the file.
+
+Then you need to restart volumio to have it regenerate the MPD file:
+
+```
+volumio vrestart
+```
 
 ## How it works
 The script runs four threads:
