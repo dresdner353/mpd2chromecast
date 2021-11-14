@@ -35,6 +35,8 @@ gv_cfg_dict['castDevice'] = 'Disabled'
 gv_cfg_dict['castMode'] = 'bogus'
 gv_cast_port = 8090
 gv_platform_variant = 'Unknown'
+gv_stream_albumart_dir = None
+gv_stream_albumart_file = None
 
 # Discovered cast devices dict
 # and related zconf object
@@ -54,19 +56,36 @@ def determine_platform_variant():
     # as some variations apply in how things work
 
     global gv_platform_variant
+    global gv_stream_albumart_dir
+    global gv_stream_albumart_file
 
-    if (os.path.exists('/usr/local/bin/moodeutl') or
-            os.path.exists('/usr/bin/moodeutl')):
-        gv_platform_variant = 'moOde'
+    platform_name_dict = {
+            'moodeutl' : 'moOde',
+            'volumio' : 'Volumio',
+            }
 
-    elif (os.path.exists('/usr/local/bin/volumio') or
-            os.path.exists('/usr/bin/volumio')):
-        gv_platform_variant = 'Volumio'
+    gv_platform_variant = 'Unknown'
+    for bin_file in platform_name_dict:
+        if (os.path.exists('/usr/local/bin/' + bin_file) or
+                os.path.exists('/usr/bin/' + bin_file)):
+            gv_platform_variant = platform_name_dict[bin_file]
+            break
 
     log_message(
             1,
             'Platform is identified as %s' % (
                 gv_platform_variant))
+
+    albumart_list = [
+            '/var/www/images/default-cover-v6.svg',
+            '/volumio/app/plugins/miscellanea/albumart/default.jpg'
+            ]
+
+    for albumart_file in albumart_list:
+        if os.path.exists(albumart_file):
+            gv_stream_albumart_dir = os.path.dirname(albumart_file)
+            gv_stream_albumart_file = os.path.basename(albumart_file)
+            break
 
 
 
@@ -470,6 +489,8 @@ class cast_handler(object):
 def web_server():
     global gv_cast_port
     global gv_mpd_music_dir
+    global gv_stream_albumart_dir
+    global gv_stream_albumart_file
 
     # engine config
     cherrypy.config.update(
@@ -492,7 +513,7 @@ def web_server():
     cherrypy.tree.mount(cast_handler(), '/', cast_conf)
 
     # /music handler for streaming
-    # and artwork
+    # and file artwork
     stream_conf = {
         '/' : {
             'tools.staticdir.on': True,
@@ -501,6 +522,18 @@ def web_server():
         }
     }
     cherrypy.tree.mount(stream_handler(), '/music', stream_conf)
+
+    # Stream Albumart dir used to serve static
+    # splash for MPD streams
+    if gv_stream_albumart_file:
+        stream_albumart_conf = {
+                '/' : {
+                    'tools.staticdir.on': True,
+                    'tools.staticdir.dir': gv_stream_albumart_dir,
+                    'tools.staticdir.index': 'index.html',
+                    }
+                }
+        cherrypy.tree.mount(stream_handler(), '/albumart', stream_albumart_conf)
 
     # Cherrypy main loop blocking
     cherrypy.engine.start()
@@ -562,6 +595,23 @@ def get_albumart_url(mpd_file):
                     gv_cast_port,
                     urllib.parse.quote(cover_rel_file))
             break
+
+    return albumart_url
+
+
+def get_mpd_stream_albumart_url():
+    global gv_server_ip
+    global gv_cast_port
+    global gv_verbose
+    global gv_stream_albumart_file
+
+    if not gv_stream_albumart_file:
+        return None
+
+    albumart_url = 'http://%s:%d/albumart/%s' % (
+            gv_server_ip,
+            gv_cast_port,
+            urllib.parse.quote(gv_stream_albumart_file))
 
     return albumart_url
 
@@ -1350,8 +1400,18 @@ def mpd_stream_agent():
 
             args = {}
             args['content_type'] = cast_file_type
-            args['title'] = 'mpd2chromecast'
-            #args['autoplay'] = true
+
+            # For stream, artwork is a graphic splast with fallback 
+            # of platform title
+            albumart_url = get_mpd_stream_albumart_url()
+            if albumart_url:
+                args['thumb'] = albumart_url
+                log_message(
+                        1,
+                        'Stream Albumart URL:%s' % (
+                            albumart_url))
+            else:
+                args['title'] = gv_platform_variant
 
             # initiate the cast
             cast_device.media_controller.play_media(
