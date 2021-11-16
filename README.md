@@ -159,18 +159,24 @@ For 2-channel 24/96 high-res, the standard HD & 4K video Chromecasts will play t
 The standard video chromecast does not work with these files at all. Playback begins to cast and then abruptly stops. On the Chromecast Audio the playback does work but with 2-channel analog output. I'm assuming it plays only two channels rather than a mix down. These files also play via Google Home devices so I'm suspecting there is a common DAC in use on both the Google Home and Chromecast audio devices. 
 
 ## Albumart & The Default Media Receiver
-The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously a goal to get albumart functional as the default media receiver can display it.
+The standard Chromecasts, integrated TV devices and Nest Hub devices have a screen on hand. So it was obviously a goal to get albumart functional as the default media receiver can display it. The albumart cast is sourced from the cover.XXX file in the same folder as the playing track.
 
-Example of how this albumart appears:
+### Casting file URL
+If using the default cast mode for file URLs, you should see the track title and cover.XXX albumart.
+
+Example of how this albumart appears (for file casting):
 ![Chromecast Default Media Receiver](./cc_default_media_receiver.jpg)
 
 The title of the current track is shown on the left. That is the only editable text field available to us. The main nuisance is the 'Default Media Receiver' text. There have been requests in the past for Google to remove this or make it editable via metadata in the cast API. To date they have not changed it. It's not easy to see in the image but a larger version of the album art is also faintly displayed in the overall background of the screen.
 
-Getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet working (although it seems to be present in the code). Both Volumio and moOde have their own ways of extracting album art separate from MPD but neither make it seamless to grab this data via native APIs. The main issue was timing where the native API is not always in sync with the MPD playlist. It became a hit and miss in getting accurate albumart with the wrong image often being served up. 
+### Casting MPD URL
+If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. 
 
-So in the end, to keep things more universal, I copied what MPD server-side itself does... when a track is being cast, the script checks the parent directory of the said file and checks for cover.(png|jpg|tiff|bmp|gif). If that file is found, it generates a URL for this file and serves it to the Chromecast along with the audio file URL. 
+moOde default albumart:
+![moOde default albumart](./cc_moode_mpd_stream.jpg)
 
-**Note:** If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. 
+Volumio default albumart:
+![moOde default albumart](./cc_volumio_mpd_stream.jpg)
 
 ## Extracting Albumart from your files
 Not everyone will have a cover.XXX file in each album folder. I've always tried to embed artwork into my ripped flac and mp3 files. So I wrote an assistant python script (extract_albumart.py) which uses the Python mutagen module to scan a filesystem of music files, test for non-presence of cover.XXX files and then try to extract the first image from the first music file it finds in each directory. It's not a guaranteed scenario expecially if separate artwork exists per file, but its a decent shot at filling in the gaps.
