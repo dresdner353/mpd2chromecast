@@ -56,7 +56,7 @@ echo "Detected home user:${HOME_USER}"
 
 # install packages
 apt-get -y install python3-pip
-pip3 install pychromecast cherrypy python-mpd2 mutagen
+pip3 install pychromecast cherrypy python-mpd2
 
 # install mod2chromecast
 su ${HOME_USER} -c "bash -c install_mpd2chromecast"

@@ -35,7 +35,7 @@ curl -s https://raw.githubusercontent.com/dresdner353/mpd2chromecast/master/inst
 ```
 This command will:
 * Install required packages..  
-pip3, pychromecast cherrypy python-mpd2 mutagen
+pip3, pychromecast cherrypy python-mpd2
 * Download mpd2chromecast  
 * Configure and start it as a background service (systemd)
 
