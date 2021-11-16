@@ -1,6 +1,6 @@
 ## mpd2chromecast
 
-This is a python script and related shell wrapper that you can deploy on a Volumio or moOde installation and use it to integrate single and multi-room playback with Google Chromecast devices and all variants such as Google/Nest Home speakers.
+This is a python script and related systemd service that you can deploy on a Volumio or moOde installation and use it to integrate single and multi-room playback with Google Chromecast devices and all variants such as Google/Nest Home speakers.
 
 The script uses an MPD client to monitor playback state of MPD, the underlying media player layer used by both Volumio and moOde. It then generates and sends a URL for the playing file to the target chromecast device or group. The chromecast then streams the file contents and plays the file. 
 
@@ -8,7 +8,7 @@ As you invoke play, stop, pause, next/previous, seek actions & volume control on
 
 **Note:** Does not work with the official Volumio 2.x releases but works fine on the 3.0 beta/RC releases.
 
-**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the cast device. If your MPD setup via Volumio or moOde is set to not allow MPD volume control, it may result in MPD not reporting a volume level. When this happens, the script will just disable its volume support.
+**Note:** MPD Volume control needs to be enabled for this script to then relay that value to the cast device. If your MPD setup via Volumio or moOde is set to not allow MPD volume control, it may result in MPD not reporting a volume level. When this happens, the script will just disable volume support.
 
 ## Acknowledgements
 The script would not be possible without the dedicated hard work of others who wrote various modules that made my job a lot easier:
@@ -93,11 +93,11 @@ sudo systemctl stop mpd2chromecast
 python3 mpd2chromecast/mpd2chromecast.py
 
 ```
-The above will stop the background service and let you run the script directly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command even redirect it to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
+The above will stop the background service and let you run the script directly on the terminal and see any output it produces. You can also add the ```--verbose``` option to that command for more verbose output or even redirect the output to a file etc. Ctrl-C to stop the direct execution and run ```sudo systemctl start mpd2chromecast``` to return to the background service.
 
 
 ## Configuring MPD Streaming (for DSP integration or gapless playback)
-If you're interested in gapless playback or leveraging any kind of DSP effects provided by moOde or Volumio, then you can use the following steps to get MPD streaming enabled. Once its up and running, when casting select the "Cast MPD Output Stream" to ensure that the MPD stream is cast instead of the file URL.
+If you're interested in gapless playback or leveraging any kind of DSP effects/processing provided by moOde or Volumio, then you can use the following steps to get MPD streaming enabled. Then when casting select the "Cast MPD Output Stream" to ensure that the MPD stream is cast instead of the file URL.
 
 ### moOde MPD Streaming
 Navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). Then click the set button to apply the change.
@@ -138,16 +138,16 @@ The script runs four threads:
 This is to monitor the playback state of the server via MPD API allowing us to know what is playing and react to track changes, volume, pause/play/skip etc. It then passes these directives to the configured chromecast. It also monitors the chromecast status to ensure playback is operational. An albumart link is also passed if available.
 
 * Cherrypy (web server)  
-This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide the control interface hosted on /cast allowing a user to select a desired cast device from a list of discovered devices.
+This thread provides a simple web server which is used to serve a file and albumart URLs for each track. It listens on port 8090 serving music URLs from /music. The chromecasts will use the URLs to stream the files for native playback. The same server is also used to provide the control interface hosted on /cast and / allowing a user to select the desired cast mode and target cast device from the list of discovered devices.
 
 * Config  
-This thread just monitors config (~/.mpd2chromecast) and changes one internal global variable for the selected chromecast device.
+This thread just monitors config (~/.mpd2chromecast) to track changes for the selected chromecast device or cast mode.
 
 * Chromecast Discovery  
-This thread runs on loop every minute, scanning for available chromecasts and uses the details to obtain API handles on the desired chromecast for streaming. 
+This thread runs continual scanning for available cast devices, adding/removing devices as they come and go from your network. 
 
 ## Audio file types that work
-MPD will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer and serving a file URL directly to the Chromecast and all decoding is done by the Chromecast.
+MPD will handle a wide range of files natively and work with attached DACs, HDMI or USB interfaces that can handle it. Bear in mind however that we are totally bypassing this layer and serving a file or stream URL directly to the selected cast device which does the decoding.
 
 ### MP3 16/320kbps & FLAC 2.0 16/44
 I've had perfect results on all variants of Chromecast (Video, Audio and Home) with standard MP3 320, aac files (Apple m4a) and FLAC 2.0 16/44. I did not try ogg or raw WAV 16/44 but assume it would also work.
