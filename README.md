@@ -169,8 +169,8 @@ Example of how this albumart appears (for file casting):
 
 The title of the current track is shown on the left. That is the only editable text field available to us. The main nuisance is the 'Default Media Receiver' text. There have been requests in the past for Google to remove this or make it editable via metadata in the cast API. To date they have not changed it. It's not easy to see in the image but a larger version of the album art is also faintly displayed in the overall background of the screen.
 
-### Casting MPD URL
-If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. 
+### Casting MPD Output Stream
+If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. The script is coded to detect the Volumio/moOde variant and then tries to use the default albumart of each variant.
 
 moOde default albumart:
 ![moOde default albumart](./cc_moode_mpd_stream.jpg)
