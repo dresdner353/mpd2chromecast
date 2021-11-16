@@ -170,7 +170,7 @@ Getting albumart proved a bit cumbersome. MPD support via python-mpd2 is not yet
 
 So in the end, to keep things more universal, I copied what MPD server-side itself does... when a track is being cast, the script checks the parent directory of the said file and checks for cover.(png|jpg|tiff|bmp|gif). If that file is found, it generates a URL for this file and serves it to the Chromecast along with the audio file URL. 
 
-**Note:** If you use the "Cast MPD Output Stream" mode, no albumart is sent to the cast devices. There is no way to do this and change the artwork as the tracks change without recasting each time. The whole purpose of this mode was to allow for gapless playback and that requires an uninterrupted stream.
+**Note:** If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. 
 
 ## Extracting Albumart from your files
 Not everyone will have a cover.XXX file in each album folder. I've always tried to embed artwork into my ripped flac and mp3 files. So I wrote an assistant python script (extract_albumart.py) which uses the Python mutagen module to scan a filesystem of music files, test for non-presence of cover.XXX files and then try to extract the first image from the first music file it finds in each directory. It's not a guaranteed scenario expecially if separate artwork exists per file, but its a decent shot at filling in the gaps.
