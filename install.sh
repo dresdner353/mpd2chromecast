@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Exit on errors
-set -e
+#set -e
 
 # install
 function install_mpd2chromecast {
