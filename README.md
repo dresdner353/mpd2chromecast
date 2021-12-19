@@ -108,6 +108,10 @@ With Volumio, its a bit of command line lifting:
 
 ```
 ssh volumio@volumio.local
+
+# take a backup of the original file (needed for updates)
+cp /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl mpd.conf.tmpl_orig
+
 sudo nano /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl
 ```
 Then paste in the following in the audio output section:
@@ -130,6 +134,23 @@ Then you need to restart volumio to have it regenerate the MPD file:
 
 ```
 volumio vrestart
+```
+
+**Note:** Volumio will likely refuse to update when this file has been modified. So when performing an update, you may need to first restore the original as follows:
+```
+# take a backup of the current file (that has your MPD mods)
+cp /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl mpd.conf.tmpl_bkup
+
+# restore original file
+sudo cp mpd.conf.tmpl_orig /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl 
+
+# restart volumio, and then try the update again
+volumio vrestart
+
+# After update, take a copy again of the latest file 
+# and restore customised file (or recreate edits from scratch)
+cp /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl mpd.conf.tmpl_orig
+sudo cp mpd.conf.tmpl_bkup /volumio/app/plugins/music_service/mpd/mpd.conf.tmpl 
 ```
 
 ## How it works
