@@ -868,7 +868,7 @@ def mpd_file_agent():
         if mpd_file:
             cast_url, cast_file_type = mpd_file_to_url(mpd_file)
         else:
-            # no file, stop casting
+            # no file to stream -> stop casting 
             if (cast_device):
                 log_message(
                         1,
@@ -933,6 +933,22 @@ def mpd_file_agent():
             cast_device.set_volume(mpd_volume / 100)
             cast_volume = mpd_volume
             continue
+
+        # Stop event
+        # stop and quit cast app
+        if (cast_status != 'stop' and 
+            mpd_status == 'stop' and
+            cast_device):
+
+            log_message(
+                    1,
+                    'Stopping Cast App')
+            cast_device.media_controller.stop()
+            cast_device.quit_app()
+            cast_status = mpd_status
+            cast_device = None
+            cast_volume = 0
+            continue  
 
         # Initial Cast protection for file streaming
         # After an initial cast we pause MPD 
