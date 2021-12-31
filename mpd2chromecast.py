@@ -865,11 +865,20 @@ def mpd_file_agent():
 
         # Cast Device URL for media
         # derived into a file URL (streaming)
-        # or fixed MPD output stream
         if mpd_file:
             cast_url, cast_file_type = mpd_file_to_url(mpd_file)
         else:
-            # no file, nothing more to do
+            # no file, stop casting
+            if (cast_device):
+                log_message(
+                        1,
+                        'No current track.. Stopping Cast App')
+                cast_device.media_controller.stop()
+                cast_device.quit_app()
+                cast_status = mpd_status
+                cast_device = None
+                cast_volume = 0
+
             continue
 
         # Get cast device when in play state and 
@@ -924,22 +933,6 @@ def mpd_file_agent():
             cast_device.set_volume(mpd_volume / 100)
             cast_volume = mpd_volume
             continue
-
-        # Stop event
-        # stop and quit cast app
-        if (cast_status != 'stop' and 
-            mpd_status == 'stop' and
-            cast_device):
-
-            log_message(
-                    1,
-                    'Stopping Cast App')
-            cast_device.media_controller.stop()
-            cast_device.quit_app()
-            cast_status = mpd_status
-            cast_device = None
-            cast_volume = 0
-            continue  
 
         # Initial Cast protection for file streaming
         # After an initial cast we pause MPD 
