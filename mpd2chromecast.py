@@ -1038,8 +1038,8 @@ def mpd_file_agent():
             # URL to stream
             cast_device.wait()
 
-            if (cast_volume != mpd_volume and
-                    mpd_volume != -1):
+            if (mpd_volume != -1 and 
+                    cast_volume != mpd_volume):
                 # Set volume to match local MPD volume
                 # avoids sudden volume changes after playback starts when 
                 # they sync up
@@ -1361,18 +1361,6 @@ def mpd_stream_agent():
             cast_device.wait()
             force_cast = True
 
-            # Volume sync before we cast
-            if (cast_volume != mpd_volume and
-                    mpd_volume != -1):
-                # Set volume to match local MPD volume
-                # avoids sudden volume changes after playback starts when 
-                # they sync up
-                log_message(
-                        1,
-                        'Setting Cast Device Volume: %d' % (mpd_volume))
-                # Cast Device volume is 0.0 - 1.0 (divide by 100)
-                cast_device.set_volume(mpd_volume / 100)
-                cast_volume = mpd_volume
 
         # MPD audio PCM change
         # simply forces a recast
@@ -1421,6 +1409,18 @@ def mpd_stream_agent():
                             albumart_url))
             else:
                 args['title'] = gv_platform_variant
+
+            # Volume sync before we cast
+            if (mpd_volume != -1):
+                # Set volume to match local MPD volume
+                # avoids sudden volume changes after playback starts when 
+                # they sync up
+                log_message(
+                        1,
+                        'Setting Cast Device Volume: %d' % (mpd_volume))
+                # Cast Device volume is 0.0 - 1.0 (divide by 100)
+                cast_device.set_volume(mpd_volume / 100)
+                cast_volume = mpd_volume
 
             # initiate the cast
             cast_device.media_controller.play_media(
