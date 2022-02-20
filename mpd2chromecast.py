@@ -1025,6 +1025,13 @@ def mpd_file_agent():
             args['title'] = title
             args['autoplay'] = True
 
+            # metadata MusicTrackMediaMetadata (3)
+            # Lets us push Artist and Album name
+            args['metadata'] = {}
+            args['metadata']['metadataType'] = 3 
+            args['metadata']['artist'] = artist
+            args['metadata']['albumName'] = album
+
             albumart_url = get_albumart_url(mpd_file)
             if albumart_url:
                 args['thumb'] = albumart_url
@@ -1051,6 +1058,7 @@ def mpd_file_agent():
                 cast_volume = mpd_volume
 
             # Initiate the cast
+            print(args)
             cast_device.media_controller.play_media(
                     cast_url, 
                     **args)
