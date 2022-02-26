@@ -546,9 +546,11 @@ def mpd_file_to_url(mpd_file):
 
     # Radio/external stream
     # URL will start with http
-    if mpd_file.startswith('http'):
+    if (mpd_file.startswith('http://') or 
+            mpd_file.startswith('https://')):
         cast_url = mpd_file
-        type = 'audio/mp3'
+        mime_type = 'audio/mp3' # guess
+        stream_type = 'radio'
     else:
         # Format file URL as path from our web server
         # mpd_file path is also made web-safe
@@ -559,9 +561,10 @@ def mpd_file_to_url(mpd_file):
 
         # Split out extension of file
         file, ext = os.path.splitext(mpd_file)
-        type = 'audio/%s' % (ext.replace('.', ''))
+        mime_type = 'audio/%s' % (ext.replace('.', ''))
+        stream_type = 'file'
 
-    return (cast_url, type)
+    return (cast_url, mime_type, stream_type)
 
 
 def get_albumart_url(mpd_file):
@@ -866,7 +869,7 @@ def mpd_file_agent():
         # Cast Device URL for media
         # derived into a file URL (streaming)
         if mpd_file:
-            cast_url, cast_file_type = mpd_file_to_url(mpd_file)
+            cast_url, cast_mime_type, stream_type = mpd_file_to_url(mpd_file)
         else:
             # no file to stream -> stop casting 
             if (cast_device):
@@ -956,7 +959,7 @@ def mpd_file_agent():
         # cast_elapsed - 1 when the 
         # cast device is reporting elapsed time
         # Does not apply for radio streams
-        if (not mpd_file.startswith('http') and 
+        if (stream_type == 'file' and 
                 not cast_confirmed and 
                 mpd_status == 'pause' and 
                 cast_status == 'play'):
@@ -975,9 +978,10 @@ def mpd_file_agent():
                 cast_confirmed = True
             continue
 
-        # Pause
-        if (cast_status != 'pause' and
-            mpd_status == 'pause'):
+        # Pause file stream only
+        if (stream_type == 'file' and 
+                cast_status != 'pause' and
+                mpd_status == 'pause'):
 
             log_message(
                     1,
@@ -1018,10 +1022,10 @@ def mpd_file_agent():
                     1,
                     'Casting URL:%s type:%s' % (
                         cast_url,
-                        cast_file_type))
+                        cast_mime_type))
 
             args = {}
-            args['content_type'] = cast_file_type
+            args['content_type'] = cast_mime_type
             args['title'] = title
             args['autoplay'] = True
 
@@ -1068,14 +1072,13 @@ def mpd_file_agent():
             cast_id = mpd_id
 
             # Pause and seek to start of track
-            # only applies to local files
-            if (not mpd_file.startswith('http')):
-                log_message(
-                        1,
-                        'Pausing MPD (initial cast)')
-                mpd_client.pause(1)
-                mpd_client.seekcur(0)
-                cast_confirmed = False
+            # applies to local files and radio streams
+            log_message(
+                    1,
+                    'Pausing MPD (initial cast)')
+            mpd_client.pause(1)
+            mpd_client.seekcur(0)
+            cast_confirmed = False
 
             # no more to do until next loop
             continue
@@ -1087,7 +1090,7 @@ def mpd_file_agent():
         # seek if there is a difference of min 10 seconds
         # That prevents mis-fire if the two elapsed times are 
         # just out of sync versus an actual mpd seek being performed
-        if (not mpd_file.startswith('http') and 
+        if (stream_type == 'file' and
                 mpd_status == 'play' and 
                 cast_status == 'play' and 
                 cast_confirmed and 
@@ -1106,7 +1109,7 @@ def mpd_file_agent():
         # Radio streams ignored for this.
         # The value we then set on mpd is 1 second 
         # behind the cast device elapsed time.
-        if (not mpd_file.startswith('http') and
+        if (stream_type == 'file' and
                 mpd_status == 'play' and 
                 cast_elapsed > 0 and 
                 cast_elapsed % 10 == 0 and
@@ -1150,7 +1153,7 @@ def mpd_stream_agent():
 
     # Fixed stream details
     cast_url = 'http://%s:8000/' % (gv_server_ip)
-    cast_file_type = 'audio/flac'
+    cast_mime_type = 'audio/flac'
     
     while (True):
         if gv_cfg_dict['castMode'] != 'mpd':
@@ -1401,10 +1404,10 @@ def mpd_stream_agent():
                     1,
                     'casting mpd url:%s type:%s' % (
                         cast_url,
-                        cast_file_type))
+                        cast_mime_type))
 
             args = {}
-            args['content_type'] = cast_file_type
+            args['content_type'] = cast_mime_type
 
             # For stream, artwork is a graphic splast with fallback 
             # of platform title
