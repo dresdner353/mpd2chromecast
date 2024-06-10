@@ -2,11 +2,13 @@
 
 # Exit on errors
 #set -e
+MOODE_USER=$(id -u -n)
+MOODE_HOME="/home/${MOODE_USER}
 
 # install
 function install_mpd2chromecast {
     cd # go to home
-    echo "Installing mpd2chromecast user:${USER} pwd:${HOME}"
+    echo "Installing mpd2chromecast user:${MOODE_USER} pwd:${MOODE_HOME}"
 
     # GIT repo
     echo "Downloading mpd2chromecast..."
@@ -18,9 +20,9 @@ function install_mpd2chromecast {
     then 
         echo "purging old crontab entries"
         # filter out existing entries
-        crontab -l | sed -e '/mpd2chromecast/d' >/tmp/${USER}.cron
+        crontab -l | sed -e '/mpd2chromecast/d' >/tmp/${MOODE_USER}.cron
         # reapply filtered crontab
-        crontab /tmp/${USER}.cron
+        crontab /tmp/${MOODE_USER}.cron
     fi
 }
 
@@ -36,23 +38,23 @@ fi
 
 # Determine the variant and then non-root user
 
-echo "Detected home user:$USER"
+echo "Detected home user:$MOODE_USER"
 
 # install mod2chromecast
-su $USER -c "bash -c install_mpd2chromecast"
+su $MOODE_USER -c "bash -c install_mpd2chromecast"
 
 # install packages
 apt-get update
 apt-get -y install python3-pip
-cd /home/$USER/mpd2chromecast
+cd $MOODE_HOME/mpd2chromecast
 pip3 install -r requirements.txt --break-system-packages
 #pip3 install pychromecast cherrypy python-mpd2
 
 # systemd service
-echo "Systemd steps for ~${HOME}/mpd2chromecast/mpd2chromecast.service"
+echo "Systemd steps for ${MOODE_HOME}/mpd2chromecast/mpd2chromecast.service"
 
 # create a user-specific variant of service file
-sed -e "s/__USER__/${USER}/g"  ${HOME}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
+sed -e "s/__USER__/${MOODE_USER}/g"  ${MOODE_HOME}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
 
 # install and start service
 cp /tmp/mpd2chromecast.service /etc/systemd/system
