@@ -30,11 +30,17 @@ function install_mpd2chromecast {
 export -f install_mpd2chromecast 
 
 # main()
-if [[ "`whoami`" != "root" ]]
-then
+if [ "$UID" -eq 0 ]; then
+    echo "The script is running as root user."
+else
     echo "This script must be run as root (or with sudo)"
     exit 1
 fi
+#if [[ "`whoami`" != "root" ]]
+#then
+#    echo "This script must be run as root (or with sudo)"
+#    exit 1
+#fi
 
 # Determine the variant and then non-root user
 
