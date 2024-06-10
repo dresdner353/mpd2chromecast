@@ -3,7 +3,7 @@
 # Exit on errors
 #set -e
 MOODE_USER=$(id -u -n)
-MOODE_HOME="/home/${MOODE_USER}
+MOODE_HOME="/home/${MOODE_USER}"
 
 # install
 function install_mpd2chromecast {
