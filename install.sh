@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Exit on errors
-#set -e
+set -e
 MOODE_USER=$(id -u -n)
 MOODE_HOME="/home/${MOODE_USER}"
 
