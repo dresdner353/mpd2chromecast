@@ -31,7 +31,7 @@ ssh pi@moode.local
 ```
 Then start the install process as follows (you will be prompted for the password for sudo):
 ```
-curl -s https://raw.githubusercontent.com/dresdner353/mpd2chromecast/master/install.sh | sudo bash
+curl -s https://raw.githubusercontent.com/papampi/mpd2chromecast/master/install.sh | sudo bash
 ```
 This command will:
 * Install required packages..  
