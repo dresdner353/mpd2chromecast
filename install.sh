@@ -35,38 +35,24 @@ then
 fi
 
 # Determine the variant and then non-root user
-# only supports Volumio and moOde at present
-VOLUMIO_CHECK=/usr/local/bin/volumio		
-MOODE_CHECK=/usr/local/bin/moodeutl		
 
-if [[ -f ${VOLUMIO_CHECK} ]]
-then
-    HOME_USER=volumio
-    HOME_DIR=/home/volumio
-elif [[ -f ${MOODE_CHECK} ]]
-then
-    HOME_USER=pi
-    HOME_DIR=/home/pi
-else
-    echo "Cannot determine variant (volumio or moOde)"
-    exit 1
-fi
-echo "Detected home user:${HOME_USER}"
+echo "Detected home user:$USER"
 
+# install mod2chromecast
+su $USER -c "bash -c install_mpd2chromecast"
 
 # install packages
 apt-get update
 apt-get -y install python3-pip
-pip3 install pychromecast cherrypy python-mpd2
-
-# install mod2chromecast
-su ${HOME_USER} -c "bash -c install_mpd2chromecast"
+cd /home/$USER/mpd2chromecast
+pip3 install -r requirements.txt --break-system-packages
+#pip3 install pychromecast cherrypy python-mpd2
 
 # systemd service
-echo "Systemd steps for ~${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
+echo "Systemd steps for ~${HOME}/mpd2chromecast/mpd2chromecast.service"
 
 # create a user-specific variant of service file
-sed -e "s/__USER__/${HOME_USER}/g"  ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
+sed -e "s/__USER__/${USER}/g"  ${HOME}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
 
 # install and start service
 cp /tmp/mpd2chromecast.service /etc/systemd/system
