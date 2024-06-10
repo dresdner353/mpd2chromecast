@@ -2,8 +2,6 @@
 
 # Exit on errors
 set -e
-MOODE_USER=$(id -u -n)
-MOODE_HOME="/home/${MOODE_USER}"
 
 # install
 function install_mpd2chromecast {
@@ -28,6 +26,8 @@ function install_mpd2chromecast {
 
 # export function for su call
 export -f install_mpd2chromecast 
+MOODE_USER=$(id -u -n)
+MOODE_HOME="/home/${MOODE_USER}"
 
 # main()
 if [ "$UID" -eq 0 ]; then
