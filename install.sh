@@ -21,6 +21,15 @@ function install_mpd2chromecast {
   cd || exit
   echo "Installing mpd2chromecast user:${HOME_USER} pwd:${HOME_DIR}"
   # GIT repo
+  # Check if Git is installed
+  if ! command -v git &> /dev/null
+  then
+    echo "Git is not installed. Installing Git..."
+    sudo apt-get update
+    sudo apt-get install -y git
+    echo "Git installation complete."
+  fi
+
   echo "Downloading or updating mpd2chromecast..."
   # Check if mpd2chromecast folder exists
   if [ -d "$HOME_DIR/mpd2chromecast" ]; then
@@ -52,7 +61,7 @@ su "$HOME_USER" -c "bash -c install_mpd2chromecast"
 
 # update and install packages
 apt-get update
-apt-get -y install python3-pip git
+apt-get -y install python3-pip
 cd "$HOME_DIR"/mpd2chromecast || exit
 pip3 install -r requirements.txt --break-system-packages
 
