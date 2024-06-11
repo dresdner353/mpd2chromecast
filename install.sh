@@ -5,16 +5,19 @@
 if [ "$UID" -eq 0 ]; then
   if [ -n "$SUDO_USER" ]; then
     HOME_USER="$SUDO_USER"
+    HOME_DIR="/home/$HOME_USER"
   else
-    HOME_USER=$(id -u -n)
+    HOME_USER="root"
+    HOME_DIR="/root"
   fi
-  HOME_DIR="/home/$HOME_USER"
   echo "The script is running as root user."
 else
   echo "This script must be run as root (or with sudo)"
   exit 1
 fi
 echo "Detected User:$HOME_USER"
+echo "Detected User Home:$HOME_DIR"
+
 # install
 function install_mpd2chromecast {
   # go to home
