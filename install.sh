@@ -29,7 +29,7 @@ function install_mpd2chromecast {
     git pull
   else
     # If it doesn't exist, clone the repository
-    git clone https://github.com/papampi/mpd2chromecast.git "$HOME_DIR/mpd2chromecast"
+    git clone https://github.com/dresdner353/mpd2chromecast.git "$HOME_DIR/mpd2chromecast"
   fi
 
   # Purge old entries from crontab if cron is installed
