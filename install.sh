@@ -55,8 +55,10 @@ function install_mpd2chromecast {
   fi
 }
 
-# export function for su call
+# Exporting the variables to make them available to the function
 export -f install_mpd2chromecast
+export HOME_USER
+export HOME_DIR
 
 # main()
 # install mod2chromecast
