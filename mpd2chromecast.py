@@ -32,7 +32,7 @@ def log_message(verbose,
 gv_cfg_filename = ''
 gv_cfg_dict = {}
 gv_cfg_dict['castDevice'] = 'Disabled'
-gv_cfg_dict['castMode'] = 'bogus'
+gv_cfg_dict['castMode'] = 'direct'
 gv_cast_port = 8090
 gv_platform_variant = 'Unknown'
 gv_stream_albumart_dir = None
@@ -837,9 +837,10 @@ def mpd_file_agent():
 
             log_message(
                     1,
-                    '%s (%s) [file] vol:%s %d:%02d/%d:%02d [%02d%%]' % (
+                    '%s (%s/%s) [file] vol:%s %d:%02d/%d:%02d [%02d%%]' % (
                         cast_name,
                         cast_status,
+                        cast_player_state,
                         'N/A' if mpd_volume == -1 else cast_volume,
                         cast_elapsed_mins,
                         cast_elapsed_secs,
