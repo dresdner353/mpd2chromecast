@@ -32,7 +32,7 @@ def log_message(verbose,
 gv_cfg_filename = ''
 gv_cfg_dict = {}
 gv_cfg_dict['castDevice'] = 'Disabled'
-gv_cfg_dict['castMode'] = 'direct'
+gv_cfg_dict['castMode'] = 'direct' # default 
 gv_cast_port = 8090
 gv_platform_variant = 'Unknown'
 gv_stream_albumart_dir = None
