@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Exit on errors
-#set -e
+set -e
 
 # install
 function install_mpd2chromecast {
@@ -12,16 +12,6 @@ function install_mpd2chromecast {
     echo "Downloading mpd2chromecast..."
     rm -rf mpd2chromecast
     git clone https://github.com/dresdner353/mpd2chromecast.git
-
-    # Purge old entries from crontab if cron is installed
-    if [[ -f /usr/sbin/cron ]]
-    then 
-        echo "purging old crontab entries"
-        # filter out existing entries
-        crontab -l | sed -e '/mpd2chromecast/d' >/tmp/${USER}.cron
-        # reapply filtered crontab
-        crontab /tmp/${USER}.cron
-    fi
 }
 
 # export function for su call
@@ -30,46 +20,39 @@ export -f install_mpd2chromecast
 # main()
 if [[ "`whoami`" != "root" ]]
 then
-    echo "This script must be run as root (or with sudo)"
+    echo "This script must be run as root from sudo"
     exit 1
 fi
 
-# Determine the variant and then non-root user
-# only supports Volumio and moOde at present
-VOLUMIO_CHECK=/usr/local/bin/volumio		
-MOODE_CHECK=/usr/local/bin/moodeutl		
-
-if [[ -f ${VOLUMIO_CHECK} ]]
+if [ -n "$SUDO_USER" ]
 then
-    HOME_USER=volumio
-    HOME_DIR=/home/volumio
-elif [[ -f ${MOODE_CHECK} ]]
-then
-    HOME_USER=pi
-    HOME_DIR=/home/pi
+    HOME_USER=${SUDO_USER}
+    HOME_DIR=`eval echo ~${HOME_USER}`
+    echo "Detected home user:${HOME_USER} home:${HOME_DIR}"
 else
-    echo "Cannot determine variant (volumio or moOde)"
+    echo "This script should be run with sudo from a standard user account"
+    echo "Or prefix the execution with SUDO_USER=xxx for the intended user"
     exit 1
 fi
-echo "Detected home user:${HOME_USER}"
 
-
-# install packages
+# install packages 
 apt-get update
-apt-get -y install python3-pip
-pip3 install pychromecast cherrypy python-mpd2
+apt-get -y install git python3-cherrypy3 python3-mpd2 python3-pychromecast
 
 # install mod2chromecast
 su ${HOME_USER} -c "bash -c install_mpd2chromecast"
 
 # systemd service
-echo "Systemd steps for ~${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
+echo "Systemd steps for ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
 
 # create a user-specific variant of service file
-sed -e "s/__USER__/${HOME_USER}/g"  ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
+sed \
+    -e "s/__USER__/${HOME_USER}/g" \
+    -e "s/__HOME__/${HOME_DIR}/g" \
+    ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
 
 # install and start service
-cp /tmp/mpd2chromecast.service /etc/systemd/system
+mv /tmp/mpd2chromecast.service /etc/systemd/system
 systemctl daemon-reload
 systemctl enable mpd2chromecast
 systemctl restart mpd2chromecast
