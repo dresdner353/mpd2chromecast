@@ -46,8 +46,9 @@ su ${HOME_USER} -c "bash -c install_mpd2chromecast"
 echo "Systemd steps for ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service"
 
 # create a user-specific variant of service file
-sed -e "s/__USER__/${HOME_USER}/g" \
-    -e "s/__HOME__/${HOME_DIR}/g" \
+# using % as sed delimiter as paths use "/"
+sed -e "s%__USER__%${HOME_USER}%g" \
+    -e "s%__HOME__%${HOME_DIR}%g" \
     ${HOME_DIR}/mpd2chromecast/mpd2chromecast.service >/tmp/mpd2chromecast.service
 
 # install and start service
