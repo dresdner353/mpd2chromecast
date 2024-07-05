@@ -30,7 +30,7 @@ If working with the latest Moode, you will have to have installed the image usin
 * enable SSH
 * add a user account for your own use (can name it whatever you desire)
 
-Then the custom user account is where mpd2chromecast is installed in the steps below. You may also be able to leverage the web SSH feature in Moode to set this account now if you do not wish to reflash the image.
+Then the custom user account is where mpd2chromecast is installed in the steps below. You may also be able to leverage the web SSH feature in Moode to setup this account now if you are already installed and do not wish to reflash the image.
 
 Volumio (as of July 2024) is still working on a Buster image (V10) and is still creating a volumio user in the image. So for Volumio, you will first need to enable SSH (using the /dev URL from the volumio web page) and then login as volumio (password also volumio).
 
