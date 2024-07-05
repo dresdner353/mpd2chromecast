@@ -23,11 +23,23 @@ With this module, we are able to detect and control Chromecast-based devices on 
 All URL serving provided by this script is made possible by the cherrypy module. Python does come with it's own HTTP libraries for client and server but they can be quite complex when playing a web server role. Cherrypy provides a much more mature and reliable framework for providing a directory URL server needed for the media and albumart files.
 
 ## Installation
+### Bookworm images for Raspi-OS
+New Bookworm (V12) releases of Raspi-OS are now encouraging no user accounts by default within images. 
+
+If working with the latest Moode, you will have to have installed the image using the Raspberry Pi Imager and selected custom install options to:
+* enable SSH
+* add a user account for your own use (can name it whatever you desire)
+
+Then the custom user account is where mpd2chromecast is installed in the steps below. You may also be able to leverage the web SSH feature in Moode to set this account now if you do not wish to reflash the image.
+
+Volumio (as of July 2024) is still working on a Buster image (V10) and is still creating a volumio user in the image. So for Volumio, you will first need to enable SSH (using the /dev URL from the volumio web page) and then login as volumio (password also volumio).
+
+### Install Steps
 ssh into your user account:
 ```
 ssh volumio@volumio.local
 or 
-ssh pi@moode.local
+ssh pi@moode.local (or whatever custom user you created)
 ```
 Then start the install process as follows (you will be prompted for the password for sudo):
 ```
@@ -35,7 +47,7 @@ curl -s https://raw.githubusercontent.com/dresdner353/mpd2chromecast/master/inst
 ```
 This command will:
 * Install required packages..  
-pip3, pychromecast cherrypy python-mpd2
+git, python3, pip3, pychromecast cherrypy python-mpd2
 * Download mpd2chromecast  
 * Configure and start it as a background service (systemd)
 
