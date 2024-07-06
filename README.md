@@ -52,7 +52,7 @@ git, python3, pip3, pychromecast cherrypy python-mpd2
 * Configure and start it as a background service (systemd)
 
 ## Web Interface
-![Cast Control Web Interface](./cast_web_control.jpg)
+![Cast Control Web Interface](images/cast_web_control.jpg)
 
 Browse to ```http://[your device ip]:8090``` and you will see a very simple web interface for managing the cast devices. The first drop-down combo shows all discovered Google cast-enabled devices. Select the desired device and it will set that as the active cast device. 
 
@@ -113,7 +113,7 @@ If you're interested in gapless playback or leveraging any kind of DSP effects/p
 
 ### moOde MPD Streaming
 Navigate to Moode -> Configure -> Audio -> MPD Options -> HTTP streaming. Then enable the HTTP streaming on port 8000 with FLAC encoding (for lossless). Then click the set button to apply the change.
-![Cast Control Web Interface](./moode_mpd_streaming_setup.jpg)
+![Cast Control Web Interface](images/moode_mpd_streaming_setup.jpg)
 
 ### Volumio MPD Streaming
 With Volumio, its a bit of command line lifting:
@@ -198,7 +198,7 @@ The standard Chromecasts, integrated TV devices and Nest Hub devices have a scre
 If using the default cast mode for file URLs, you should see the track title and cover.XXX albumart.
 
 Example of how this albumart appears (for file casting):
-![Chromecast Default Media Receiver](./cc_default_media_receiver.jpg)
+![Chromecast Default Media Receiver](images/cc_default_media_receiver.jpg)
 
 The album title, track title and artist name are shown on the left centre. The main nuisance is the 'Default Media Receiver' text at the top. To date there is no way to disable this. Album art is nicely done with a smaller version to the right and a larger version used to fill background of the screen.
 
@@ -206,10 +206,10 @@ The album title, track title and artist name are shown on the left centre. The m
 If you use the "Cast MPD Output Stream" mode, static default Volumio/moOde albumart is sent to the cast devices. There is no way to cast a continuous stream and change the artwork as the tracks change without recasting each time. The script is coded to detect the Volumio/moOde variant and then tries to use the default albumart of each variant.
 
 moOde default albumart:
-![moOde default albumart](./cc_moode_mpd_stream.jpg)
+![moOde default albumart](images/cc_moode_mpd_stream.jpg)
 
 Volumio default albumart:
-![moOde default albumart](./cc_volumio_mpd_stream.jpg)
+![moOde default albumart](images/cc_volumio_mpd_stream.jpg)
 
 ## Extracting Albumart from your files
 Not everyone will have a cover.XXX file in each album folder. I've always tried to embed artwork into my ripped flac and mp3 files. So I wrote an assistant python script (extract_albumart.py) which uses the Python mutagen module to scan a filesystem of music files, test for non-presence of cover.XXX files and then try to extract the first image from the first music file it finds in each directory. It's not a guaranteed scenario expecially if separate artwork exists per file, but its a decent shot at filling in the gaps.
