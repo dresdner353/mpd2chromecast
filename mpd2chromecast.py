@@ -77,7 +77,7 @@ def determine_platform_variant():
                 gv_platform_variant))
 
     albumart_list = [
-            '/var/www/images/default-cover-v6.svg',
+            '/var/www/images/default-album-cover.png',
             '/volumio/app/plugins/miscellanea/albumart/default.jpg'
             ]
 
@@ -1410,9 +1410,10 @@ def mpd_stream_agent():
             args = {}
             args['content_type'] = cast_mime_type
 
-            # For stream, artwork is a graphic splast with fallback 
+            # For stream, artwork is a graphic splash with fallback 
             # of platform title
             albumart_url = get_mpd_stream_albumart_url()
+            args['title'] = gv_platform_variant
             if albumart_url:
                 args['thumb'] = albumart_url
                 log_message(
