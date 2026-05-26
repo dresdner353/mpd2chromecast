@@ -44,7 +44,7 @@ then
     # install all packages from apt
     # bookworm and presumably beyond
     echo "Performing Bookworm or later package install (all from apt)"
-    apt-get -y install git python3-pip python3-cherrypy3 python3-mpd2 python3-pychromecast
+    apt-get -y install git python3-pip python3-cherrypy3 python3-mpd python3-pychromecast
 else
     # everything prior to bookworm
     # git, python/pip from apt and pip for the modules
